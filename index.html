@@ -11,14 +11,8 @@
     #header-info { margin-bottom:10px; }
     button { padding:10px 20px; margin:5px; font-size:1rem; cursor:pointer; }
     #wheelCanvas { border:2px solid #333; border-radius:50%; }
-    /* spin animation */
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
-    }
-    #wheelCanvas.spinning {
-      animation: spin 1s linear 3; /* 3 full spins over 3 seconds */
-    }
+    @keyframes spin { from { transform:rotate(0deg);} to{transform:rotate(360deg);} }
+    #wheelCanvas.spinning { animation: spin 1s linear 3; }
     table { border-collapse: collapse; margin-top:20px; }
     td, th { border:1px solid #666; padding:8px; text-align:center; }
     input.answer { width:50px; text-align:center; font-size:1rem; }
@@ -38,9 +32,7 @@
   <button id="highScoresBtn">High Scores</button>
 </header>
 
-<main id="main">
-  <!-- dynamic content -->
-</main>
+<main id="main"></main>
 
 <footer>
   <button id="resetBtn">Reset Progress</button>
@@ -52,30 +44,25 @@
 
 <script>
 (() => {
-  // AUDIO SETUP
+  // AUDIO
   const audioSuccess   = new Audio('success.mp3');
   const audioFail      = new Audio('fail.mp3');
   const audioCountdown = new Audio('countdown.mp3');
   const audioSpin      = new Audio('spin.mp3');
   const audioLevelUp   = new Audio('level-up.mp3');
 
-  // PERSISTENCE KEYS
+  // KEYS
   const GAME_KEY = 'mulGameState';
   const HS_KEY   = 'mulHighScores';
 
-  // CELEBRATION MESSAGES
+  // MESSAGES
   const CELEBRATIONS = [
-    "Great job!",
-    "Well done!",
-    "Fantastic!",
-    "You're amazing!",
-    "Keep it up!",
-    "Bravo!",
-    "Excellent work!",
-    "You're a star!"
+    "Great job!", "Well done!", "Fantastic!",
+    "You're amazing!", "Keep it up!", "Bravo!",
+    "Excellent work!", "You're a star!"
   ];
 
-  // GAME STATE
+  // STATE
   const state = { level:1, score:0, currentTable:null };
 
   function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
@@ -96,7 +83,7 @@
     localStorage.setItem(HS_KEY, JSON.stringify(hs.slice(0,10)));
   }
 
-  // UI ELEMENTS
+  // UI
   const main          = document.getElementById('main');
   const overlay       = document.getElementById('overlay');
   const overlayContent= document.getElementById('overlayContent');
@@ -128,13 +115,12 @@
 
   document.getElementById('resetBtn').onclick = () => {
     if(confirm('Clear progress & high scores?')){
-      clearState();
-      localStorage.removeItem(HS_KEY);
+      clearState(); localStorage.removeItem(HS_KEY);
       location.reload();
     }
   };
 
-  // GAME FLOW
+  // FLOW
   function startGame(){
     loadState();
     if(state.level>1 && confirm(`Continue at Level ${state.level}?`)){
@@ -154,15 +140,14 @@
     else                    startQuiz();
   }
 
-  // WHEEL SPIN
+  // WHEEL
   function spinWheel(){
     main.innerHTML = `
       <canvas id="wheelCanvas" width="300" height="300"></canvas>
       <button id="spinBtn">Spin the Wheel</button>`;
     const canvas = document.getElementById('wheelCanvas');
     const ctx    = canvas.getContext('2d');
-    const R = 140, seg=10;
-    // draw wheel
+    const R=140, seg=10;
     for(let i=0;i<seg;i++){
       const a=(i/seg)*2*Math.PI;
       ctx.beginPath();
@@ -174,27 +159,22 @@
       ctx.translate(150,150);
       ctx.rotate(a+Math.PI/seg);
       ctx.fillStyle='#000';
-      ctx.fillText(i+1, R*0.6, 0);
+      ctx.fillText(i+1, R*0.6,0);
       ctx.restore();
     }
-    // pointer
     ctx.fillStyle='red';
     ctx.beginPath();
-    ctx.moveTo(150,10);
-    ctx.lineTo(140,40);
-    ctx.lineTo(160,40);
+    ctx.moveTo(150,10); ctx.lineTo(140,40); ctx.lineTo(160,40);
     ctx.fill();
 
     const btn = document.getElementById('spinBtn');
     btn.onclick = () => {
       audioSpin.play();
       btn.disabled = true;
-      // add CSS spin animation
       canvas.classList.add('spinning');
-      // after 3sec animation, pick random table
-      setTimeout(() => {
+      setTimeout(()=>{
         canvas.classList.remove('spinning');
-        const pick = Math.floor(Math.random()*10) + 1;
+        const pick = Math.floor(Math.random()*10)+1;
         state.currentTable = pick;
         saveState();
         audioLevelUp.play();
@@ -206,64 +186,80 @@
           hideOverlay();
           startFillMode();
         };
-      }, 3000);
+      },3000);
     };
   }
 
-  // FILL-IN MODE
+  // FILL-IN (odd levels)
   function startFillMode(){
     const n = state.currentTable;
-    const bmap = {1:4,3:4,5:5,7:6,9:7};
-    const blankCount = bmap[state.level] || 4;
-    const allowedMist = Math.floor(blankCount * 0.2);
+    const bmap={1:4,3:4,5:5,7:6,9:7};
+    const blankCount = bmap[state.level]||4;
+    const allowedMist = Math.floor(blankCount * 0.33);
     const all = Array.from({length:10},(_,i)=>i+1);
     const blanks = shuffle(all.slice()).slice(0,blankCount);
 
     main.innerHTML = `<h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
       <table>
-        <tr><th>Question</th><th>Your Answer</th></tr>
+        <tr><th>Q</th><th>Answer</th></tr>
         ${all.map(i=>`
           <tr>
             <td>${n} × ${i} =</td>
             <td>${
               blanks.includes(i)
-              ? `<input class="answer" id="ans${i}" />`
-              : `<strong>${n*i}</strong>`
+                ? `<input class="answer" id="ans${i}" />`
+                : `<strong>${n*i}</strong>`
             }</td>
           </tr>`).join('')}
-      </table>
-      ${allowedMist>0
-        ? `<p>Allowed Mistakes: ${allowedMist}</p>`
-        : ``}
-      <button id="submitFill">Submit</button>`;
+      </table>`;
 
-    document.getElementById('submitFill').onclick = () => {
-      let mistakes=0, points=0;
-      blanks.forEach(i=>{
-        const val = parseInt(document.getElementById(`ans${i}`).value,10);
-        if(val===n*i){
-          points+=10; audioSuccess.play();
-        } else {
-          mistakes++; points-=5; audioFail.play();
+    // Validate on blur
+    blanks.forEach(i => {
+      const inp = document.getElementById(`ans${i}`);
+      inp.addEventListener('blur', () => {
+        const val = parseInt(inp.value,10);
+        if(inp.value===''){
+          inp.style.backgroundColor = '';
+          return;
         }
+        if(val === n*i) {
+          inp.style.backgroundColor = '#cfc'; // green
+          audioSuccess.play();
+        } else {
+          inp.style.backgroundColor = '#fdd'; // red
+          audioFail.play();
+        }
+        // Check if all blanks filled
+        const filled = blanks.every(j => document.getElementById(`ans${j}`).value !== '');
+        if(!filled) return;
+        // Count mistakes
+        let mistakes=0;
+        blanks.forEach(j => {
+          const v = parseInt(document.getElementById(`ans${j}`).value,10);
+          if(v !== n*j) mistakes++;
+        });
+        if(mistakes > allowedMist){
+          return gameOver();
+        }
+        // Success
+        audioLevelUp.play();
+        state.score += blanks.length*10 - mistakes*5;
+        updateHeader();
+        showOverlay(`
+          <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+          <p>Errors: ${mistakes}/${allowedMist}</p>
+          <button id="nextlvl">Next Level</button>`);
+        document.getElementById('nextlvl').onclick = () => {
+          hideOverlay();
+          state.level++;
+          saveState();
+          nextStep();
+        };
       });
-      state.score += points;
-      updateHeader();
-      if(mistakes>allowedMist) return gameOver();
-      audioLevelUp.play();
-      showOverlay(`
-        <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-        <button id="nextlvl">Next Level</button>`);
-      document.getElementById('nextlvl').onclick = () => {
-        hideOverlay();
-        state.level++;
-        saveState();
-        nextStep();
-      };
-    };
+    });
   }
 
-  // QUIZ MODE
+  // QUIZ (even levels)
   function startQuiz(){
     const n = state.currentTable;
     let mistakes=0, qIdx=0, timerId=null;
@@ -291,10 +287,11 @@
         input.disabled = false;
         input.focus();
         timerId = setInterval(()=>{
-          let t = parseInt(timeE.textContent,10)-1;
+          let t = parseInt(timeE.textContent,10) - 1;
           timeE.textContent = t;
-          if(t<=0){
+          if(t <= 0){
             clearInterval(timerId);
+            audioCountdown.pause();
             return gameOver();
           }
         },1000);
@@ -303,22 +300,21 @@
         const ans = parseInt(input.value,10);
         const corr= n * questions[qIdx];
         if(ans===corr){
-          state.score+=10;
-          audioSuccess.play();
+          state.score+=10; audioSuccess.play();
         } else {
-          mistakes++;
-          state.score-=5;
-          audioFail.play();
+          mistakes++; state.score-=5; audioFail.play();
         }
         updateHeader();
         mE.textContent = mistakes;
         if(mistakes>2){
           clearInterval(timerId);
+          audioCountdown.pause();
           return gameOver();
         }
         qIdx++;
         if(qIdx>=questions.length){
           clearInterval(timerId);
+          audioCountdown.pause();
           audioLevelUp.play();
           showOverlay(`
             <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
@@ -345,6 +341,7 @@
 
   // GAME OVER & WIN
   function gameOver(){
+    audioCountdown.pause();
     audioFail.play();
     main.innerHTML = `<h2>Game Over!</h2><p>Your Score: ${state.score}</p>`;
     setTimeout(()=>{
@@ -355,13 +352,13 @@
         <p>Score: ${state.score}</p>
         <button id="replay">Play Again</button>`);
       document.getElementById('replay').onclick = () => {
-        hideOverlay();
-        startGame();
+        hideOverlay(); startGame();
       };
     },200);
   }
 
   function winGame(){
+    audioCountdown.pause();
     audioSuccess.play();
     main.innerHTML = `<h2>🎉 You Won the Game! 🎉</h2>
       <p>Final Score: ${state.score}</p>`;
@@ -373,13 +370,12 @@
         <p>Score: ${state.score}</p>
         <button id="replay2">Play Again</button>`);
       document.getElementById('replay2').onclick = () => {
-        hideOverlay();
-        startGame();
+        hideOverlay(); startGame();
       };
     },200);
   }
 
-  // UTIL: FISHER–YATES SHUFFLE
+  // SHUFFLE
   function shuffle(a){
     for(let i=a.length-1;i>0;i--){
       const j = Math.floor(Math.random()*(i+1));
@@ -388,7 +384,7 @@
     return a;
   }
 
-  // LAUNCH
+  // START
   startGame();
 
 })();
