@@ -2,492 +2,396 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <!-- Mobile-friendly viewport -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multiplication Learning Game</title>
+  <title>Multiplication Mania!</title>
   <style>
-    /* Global Styles */
-    body {
-      font-family: Arial, sans-serif;
-      background: #f7f7f7;
-      margin: 20px;
-      text-align: center;
+    * { box-sizing: border-box; font-family: sans-serif; }
+    body { margin:0; padding:0; display:flex; flex-direction:column; height:100vh; }
+    header, footer { background:#333; color:#fff; padding:10px; text-align:center; }
+    main { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }
+    #header-info { margin-bottom:10px; }
+    button { padding:10px 20px; margin:5px; font-size:1rem; cursor:pointer; }
+    #wheelCanvas { border:2px solid #333; border-radius:50%; }
+    /* spin animation */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
     }
-    #gameContainer {
-      max-width: 900px;
-      margin: auto;
-      background: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    #wheelCanvas.spinning {
+      animation: spin 1s linear 3; /* 3 full spins over 3 seconds */
     }
-    h1 {
-      margin-bottom: 10px;
-    }
-    #infoPanel {
-      margin-bottom: 20px;
-    }
-    #infoPanel span {
-      margin: 0 10px;
-      font-weight: bold;
-    }
-    /* Container for responsiveness */
-    .table-container {
-      overflow-x: auto;
-    }
-    /* Table Styles for Fill-in-the-Blanks Mode */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 20px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: center;
-    }
-    input.answer {
-      width: 60px;
-      text-align: center;
-      font-size: 1em;
-    }
-    /* Correct and Incorrect Input Styles */
-    .correct {
-      background-color: #c8e6c9 !important;
-    }
-    .incorrect {
-      background-color: #ffcdd2 !important;
-    }
-    /* Quiz Mode Styles */
-    #quizContainer {
-      margin-bottom: 20px;
-    }
-    #quizContainer input[type="text"] {
-      width: 80px;
-      font-size: 1em;
-      text-align: center;
-    }
-    /* Button Styles */
-    button {
-      padding: 10px 20px;
-      font-size: 1em;
-      margin: 10px;
-      cursor: pointer;
-    }
-    /* Mobile adjustments */
-    @media (max-width: 600px) {
-      body {
-        margin: 10px;
-      }
-      table, input.answer {
-        font-size: 1em;
-      }
-      button {
-        padding: 8px 16px;
-        font-size: 0.9em;
-      }
-    }
+    table { border-collapse: collapse; margin-top:20px; }
+    td, th { border:1px solid #666; padding:8px; text-align:center; }
+    input.answer { width:50px; text-align:center; font-size:1rem; }
+    #overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7);
+               display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.2rem; }
+    #overlay .content { background:#222; padding:20px; border-radius:8px; max-width:90%; text-align:center; }
+    #overlay.hidden { display:none; }
   </style>
 </head>
 <body>
-  <div id="gameContainer">
-    <h1>Multiplication Learning Game</h1>
-    <div id="infoPanel">
-      <span id="levelInfo">Level: 1</span>
-      <span id="scoreInfo">Score: 0</span>
-      <span id="timerInfo" style="display:none;">Time: </span>
-    </div>
-    <div id="gameArea"></div>
-    <div id="messageArea"></div>
-    <button id="nextLevelBtn" style="display: none;">Next Level</button>
-    <button id="restartBtn" style="display: none;">Restart Game</button>
+
+<header>
+  <div id="header-info">
+    <span id="levelDisplay">Level: 1</span> |
+    <span id="scoreDisplay">Score: 0</span>
   </div>
+  <button id="highScoresBtn">High Scores</button>
+</header>
 
-  <script>
-    /********************************************
-     * Global variables and level settings
-     ********************************************/
-    let currentLevel = 1;
-    let score = 0;
+<main id="main">
+  <!-- dynamic content -->
+</main>
 
-    // For Fill-in-the-Blanks mode (Levels 1–4)
-    let totalBlankCells = 0;
-    let fillModeMistakes = 0;
-    let fillAnswersCount = 0;
+<footer>
+  <button id="resetBtn">Reset Progress</button>
+</footer>
 
-    // For Quiz mode (Levels 5–10)
-    let quizQuestions = [];
-    let currentQuestionIndex = 0;
-    let quizMistakes = 0;
-    let quizTimer = null;
-    let remainingTime = 0;  // seconds
+<div id="overlay" class="hidden">
+  <div class="content" id="overlayContent"></div>
+</div>
 
-    // Mapping for quiz level time limits (in seconds)
-    const quizTimeLimits = {
-      5: 120,
-      6: 100,
-      7: 80,
-      8: 60,
-      9: 45,
-      10: 30
+<script>
+(() => {
+  // AUDIO SETUP
+  const audioSuccess   = new Audio('success.mp3');
+  const audioFail      = new Audio('fail.mp3');
+  const audioCountdown = new Audio('countdown.mp3');
+  const audioSpin      = new Audio('spin.mp3');
+  const audioLevelUp   = new Audio('level-up.mp3');
+
+  // PERSISTENCE KEYS
+  const GAME_KEY = 'mulGameState';
+  const HS_KEY   = 'mulHighScores';
+
+  // CELEBRATION MESSAGES
+  const CELEBRATIONS = [
+    "Great job!",
+    "Well done!",
+    "Fantastic!",
+    "You're amazing!",
+    "Keep it up!",
+    "Bravo!",
+    "Excellent work!",
+    "You're a star!"
+  ];
+
+  // GAME STATE
+  const state = { level:1, score:0, currentTable:null };
+
+  function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
+  function loadState(){
+    const s = localStorage.getItem(GAME_KEY);
+    if(s) Object.assign(state, JSON.parse(s));
+  }
+  function clearState(){ localStorage.removeItem(GAME_KEY); }
+
+  function getHighScores(){
+    const v = localStorage.getItem(HS_KEY);
+    return v ? JSON.parse(v) : [];
+  }
+  function saveHighScore(init, sc){
+    const hs = getHighScores();
+    hs.push({ initials:init, score:sc, date:new Date().toLocaleDateString() });
+    hs.sort((a,b)=>b.score - a.score);
+    localStorage.setItem(HS_KEY, JSON.stringify(hs.slice(0,10)));
+  }
+
+  // UI ELEMENTS
+  const main          = document.getElementById('main');
+  const overlay       = document.getElementById('overlay');
+  const overlayContent= document.getElementById('overlayContent');
+  const levelDisplay  = document.getElementById('levelDisplay');
+  const scoreDisplay  = document.getElementById('scoreDisplay');
+
+  function updateHeader(){
+    levelDisplay.textContent = 'Level: ' + state.level;
+    scoreDisplay.textContent = 'Score: ' + state.score;
+    saveState();
+  }
+
+  function showOverlay(html){
+    overlayContent.innerHTML = html;
+    overlay.classList.remove('hidden');
+  }
+  function hideOverlay(){
+    overlay.classList.add('hidden');
+  }
+
+  document.getElementById('highScoresBtn').onclick = () => {
+    const hs = getHighScores();
+    let html = `<h2>High Scores</h2><ol>`;
+    hs.forEach(e=> html+=`<li>${e.initials} - ${e.score} (${e.date})</li>`);
+    html += `</ol><button id="closeHS">Close</button>`;
+    showOverlay(html);
+    document.getElementById('closeHS').onclick = hideOverlay;
+  };
+
+  document.getElementById('resetBtn').onclick = () => {
+    if(confirm('Clear progress & high scores?')){
+      clearState();
+      localStorage.removeItem(HS_KEY);
+      location.reload();
+    }
+  };
+
+  // GAME FLOW
+  function startGame(){
+    loadState();
+    if(state.level>1 && confirm(`Continue at Level ${state.level}?`)){
+      nextStep();
+    } else {
+      clearState();
+      state.level=1; state.score=0;
+      saveState();
+      nextStep();
+    }
+  }
+
+  function nextStep(){
+    updateHeader();
+    if(state.level>10) return winGame();
+    if(state.level%2===1) spinWheel();
+    else                    startQuiz();
+  }
+
+  // WHEEL SPIN
+  function spinWheel(){
+    main.innerHTML = `
+      <canvas id="wheelCanvas" width="300" height="300"></canvas>
+      <button id="spinBtn">Spin the Wheel</button>`;
+    const canvas = document.getElementById('wheelCanvas');
+    const ctx    = canvas.getContext('2d');
+    const R = 140, seg=10;
+    // draw wheel
+    for(let i=0;i<seg;i++){
+      const a=(i/seg)*2*Math.PI;
+      ctx.beginPath();
+      ctx.moveTo(150,150);
+      ctx.arc(150,150,R, a, a+2*Math.PI/seg);
+      ctx.fillStyle=`hsl(${i*36},70%,60%)`;
+      ctx.fill(); ctx.stroke();
+      ctx.save();
+      ctx.translate(150,150);
+      ctx.rotate(a+Math.PI/seg);
+      ctx.fillStyle='#000';
+      ctx.fillText(i+1, R*0.6, 0);
+      ctx.restore();
+    }
+    // pointer
+    ctx.fillStyle='red';
+    ctx.beginPath();
+    ctx.moveTo(150,10);
+    ctx.lineTo(140,40);
+    ctx.lineTo(160,40);
+    ctx.fill();
+
+    const btn = document.getElementById('spinBtn');
+    btn.onclick = () => {
+      audioSpin.play();
+      btn.disabled = true;
+      // add CSS spin animation
+      canvas.classList.add('spinning');
+      // after 3sec animation, pick random table
+      setTimeout(() => {
+        canvas.classList.remove('spinning');
+        const pick = Math.floor(Math.random()*10) + 1;
+        state.currentTable = pick;
+        saveState();
+        audioLevelUp.play();
+        showOverlay(`
+          <h2>🎉 Table of ${pick}! 🎉</h2>
+          <p>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</p>
+          <button id="gotable">Go!</button>`);
+        document.getElementById('gotable').onclick = () => {
+          hideOverlay();
+          startFillMode();
+        };
+      }, 3000);
+    };
+  }
+
+  // FILL-IN MODE
+  function startFillMode(){
+    const n = state.currentTable;
+    const bmap = {1:4,3:4,5:5,7:6,9:7};
+    const blankCount = bmap[state.level] || 4;
+    const allowedMist = Math.floor(blankCount * 0.2);
+    const all = Array.from({length:10},(_,i)=>i+1);
+    const blanks = shuffle(all.slice()).slice(0,blankCount);
+
+    main.innerHTML = `<h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
+      <table>
+        <tr><th>Question</th><th>Your Answer</th></tr>
+        ${all.map(i=>`
+          <tr>
+            <td>${n} × ${i} =</td>
+            <td>${
+              blanks.includes(i)
+              ? `<input class="answer" id="ans${i}" />`
+              : `<strong>${n*i}</strong>`
+            }</td>
+          </tr>`).join('')}
+      </table>
+      ${allowedMist>0
+        ? `<p>Allowed Mistakes: ${allowedMist}</p>`
+        : ``}
+      <button id="submitFill">Submit</button>`;
+
+    document.getElementById('submitFill').onclick = () => {
+      let mistakes=0, points=0;
+      blanks.forEach(i=>{
+        const val = parseInt(document.getElementById(`ans${i}`).value,10);
+        if(val===n*i){
+          points+=10; audioSuccess.play();
+        } else {
+          mistakes++; points-=5; audioFail.play();
+        }
+      });
+      state.score += points;
+      updateHeader();
+      if(mistakes>allowedMist) return gameOver();
+      audioLevelUp.play();
+      showOverlay(`
+        <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+        <button id="nextlvl">Next Level</button>`);
+      document.getElementById('nextlvl').onclick = () => {
+        hideOverlay();
+        state.level++;
+        saveState();
+        nextStep();
+      };
+    };
+  }
+
+  // QUIZ MODE
+  function startQuiz(){
+    const n = state.currentTable;
+    let mistakes=0, qIdx=0, timerId=null;
+    const questions = shuffle(Array.from({length:10},(_,i)=>i+1));
+
+    main.innerHTML = `
+      <h2>Table of ${n} — Quiz (60s, max 2 mistakes)</h2>
+      <p>Time: <span id="time">60</span>s |
+         Mistakes: <span id="mcount">0</span>/2</p>
+      <div id="question">Press Start</div>
+      <input id="qans" class="answer" disabled />
+      <button id="submitQ">Start</button>
+    `;
+
+    const btn   = document.getElementById('submitQ');
+    const input = document.getElementById('qans');
+    const timeE = document.getElementById('time');
+    const mE    = document.getElementById('mcount');
+
+    btn.onclick = () => {
+      if(btn.textContent==='Start'){
+        audioCountdown.loop = true;
+        audioCountdown.play();
+        btn.textContent = 'Submit';
+        input.disabled = false;
+        input.focus();
+        timerId = setInterval(()=>{
+          let t = parseInt(timeE.textContent,10)-1;
+          timeE.textContent = t;
+          if(t<=0){
+            clearInterval(timerId);
+            return gameOver();
+          }
+        },1000);
+        showNext();
+      } else {
+        const ans = parseInt(input.value,10);
+        const corr= n * questions[qIdx];
+        if(ans===corr){
+          state.score+=10;
+          audioSuccess.play();
+        } else {
+          mistakes++;
+          state.score-=5;
+          audioFail.play();
+        }
+        updateHeader();
+        mE.textContent = mistakes;
+        if(mistakes>2){
+          clearInterval(timerId);
+          return gameOver();
+        }
+        qIdx++;
+        if(qIdx>=questions.length){
+          clearInterval(timerId);
+          audioLevelUp.play();
+          showOverlay(`
+            <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+            <button id="nextlvl2">Next Level</button>`);
+          document.getElementById('nextlvl2').onclick = () => {
+            hideOverlay();
+            state.level++;
+            saveState();
+            nextStep();
+          };
+        } else {
+          showNext();
+        }
+      }
     };
 
-    // Score adjustments
-    const POINTS_CORRECT = 10;
-    const POINTS_INCORRECT = 5; // deducted
-
-    /********************************************
-     * Audio functions using the Web Audio API
-     ********************************************/
-    // Create a single AudioContext to reuse
-    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    function playCorrectSound() {
-      // Resume context if suspended (necessary for mobile browsers)
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
-      // Create an oscillator for a higher-pitched beep
-      const oscillator = audioCtx.createOscillator();
-      oscillator.frequency.setValueAtTime(600, audioCtx.currentTime); // Frequency in Hz
-      oscillator.type = "sine";
-      oscillator.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.2); // Play for 0.2 seconds
+    function showNext(){
+      document.getElementById('question').textContent =
+        `${n} × ${questions[qIdx]} = `;
+      input.value = '';
+      input.focus();
     }
+  }
 
-    function playWrongSound() {
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
-      // Create an oscillator for a lower-pitched beep
-      const oscillator = audioCtx.createOscillator();
-      oscillator.frequency.setValueAtTime(200, audioCtx.currentTime); // Frequency in Hz
-      oscillator.type = "sine";
-      oscillator.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.3); // Play for 0.3 seconds
+  // GAME OVER & WIN
+  function gameOver(){
+    audioFail.play();
+    main.innerHTML = `<h2>Game Over!</h2><p>Your Score: ${state.score}</p>`;
+    setTimeout(()=>{
+      const init = prompt('Enter your initials:','').toUpperCase();
+      if(init) saveHighScore(init, state.score);
+      showOverlay(`
+        <h2>Game Over</h2>
+        <p>Score: ${state.score}</p>
+        <button id="replay">Play Again</button>`);
+      document.getElementById('replay').onclick = () => {
+        hideOverlay();
+        startGame();
+      };
+    },200);
+  }
+
+  function winGame(){
+    audioSuccess.play();
+    main.innerHTML = `<h2>🎉 You Won the Game! 🎉</h2>
+      <p>Final Score: ${state.score}</p>`;
+    setTimeout(()=>{
+      const init = prompt('Enter your initials:','').toUpperCase();
+      if(init) saveHighScore(init, state.score);
+      showOverlay(`
+        <h2>Congratulations!</h2>
+        <p>Score: ${state.score}</p>
+        <button id="replay2">Play Again</button>`);
+      document.getElementById('replay2').onclick = () => {
+        hideOverlay();
+        startGame();
+      };
+    },200);
+  }
+
+  // UTIL: FISHER–YATES SHUFFLE
+  function shuffle(a){
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]] = [a[j],a[i]];
     }
+    return a;
+  }
 
-    /********************************************
-     * Header Colors for Fill-in-the-Blanks Mode
-     * Both header for factor 'i' in top row and left column will use same soft pastel color.
-     ********************************************/
-    const headerColors = [
-      "#ffe0e0", // 1: soft light red
-      "#e0ffe0", // 2: soft light green
-      "#e0e0ff", // 3: soft light blue
-      "#fff0e0", // 4: soft light orange
-      "#f0e0ff", // 5: soft light purple
-      "#e0fff0", // 6: soft light teal
-      "#ffffe0", // 7: soft light yellow
-      "#e0ffff", // 8: soft light cyan
-      "#ffe0ff", // 9: soft light magenta
-      "#f0f0e0"  // 10: soft light beige
-    ];
+  // LAUNCH
+  startGame();
 
-    function getHeaderColor(num) {
-      // Ensure num is between 1 and 10
-      return headerColors[num - 1] || "#ffffff";
-    }
-
-    /********************************************
-     * UI Update Functions
-     ********************************************/
-    // Updates the info panel with level, score, and (if visible) timer
-    function updateInfoPanel() {
-      document.getElementById("levelInfo").innerText = "Level: " + currentLevel;
-      document.getElementById("scoreInfo").innerText = "Score: " + score;
-      if (currentLevel >= 5) {
-        document.getElementById("timerInfo").innerText = "Time: " + remainingTime + "s";
-        document.getElementById("timerInfo").style.display = "inline-block";
-      } else {
-        document.getElementById("timerInfo").style.display = "none";
-      }
-    }
-
-    // Displays messages in the message area
-    function showMessage(msg, color = "black") {
-      const msgArea = document.getElementById("messageArea");
-      msgArea.innerText = msg;
-      msgArea.style.color = color;
-    }
-
-    // Clears the game area and message area
-    function clearAreas() {
-      document.getElementById("gameArea").innerHTML = "";
-      document.getElementById("messageArea").innerHTML = "";
-      document.getElementById("nextLevelBtn").style.display = "none";
-    }
-
-    /********************************************
-     * Game Flow Functions
-     ********************************************/
-    // Starts the entire game
-    function startGame() {
-      currentLevel = 1;
-      score = 0;
-      clearAreas();
-      updateInfoPanel();
-      startLevel();
-    }
-
-    // Called to start a level based on currentLevel
-    function startLevel() {
-      clearAreas();
-      if (currentLevel >= 1 && currentLevel <= 4) {
-        createFillInBlanksMode();
-      } else if (currentLevel >= 5 && currentLevel <= 10) {
-        createQuizMode();
-      }
-    }
-
-    // Transition to next level after successful completion
-    function nextLevel() {
-      currentLevel++;
-      if (currentLevel > 10) {
-        showMessage("Congratulations! You have completed all levels. Final Score: " + score, "green");
-        document.getElementById("nextLevelBtn").style.display = "none";
-        document.getElementById("restartBtn").style.display = "inline-block";
-      } else {
-        startLevel();
-      }
-    }
-
-    // Ends the game and shows the Restart button
-    function gameOver() {
-      clearInterval(quizTimer);
-      showMessage("Game Over! Final Score: " + score, "red");
-      document.getElementById("nextLevelBtn").style.display = "none";
-      document.getElementById("restartBtn").style.display = "inline-block";
-    }
-
-    /********************************************
-     * Level 1–4: Fill-in-the-Blanks Mode Functions
-     ********************************************/
-    function createFillInBlanksMode() {
-      // Set blank percentage based on level (Level1:10%, Level2:20%, Level3:30%, Level4:40%)
-      const blankPercentage = currentLevel * 0.10;
-      totalBlankCells = 0;
-      fillModeMistakes = 0;
-      fillAnswersCount = 0;
-      
-      // Create a table element to display the multiplication table (1–10)
-      const table = document.createElement("table");
-      
-      // Create table header row (for factors 1..10)
-      const headerRow = document.createElement("tr");
-      // Empty top-left cell
-      const emptyHeader = document.createElement("th");
-      headerRow.appendChild(emptyHeader);
-      for (let i = 1; i <= 10; i++) {
-        const th = document.createElement("th");
-        th.innerText = i;
-        // Set soft background color for the header based on the number
-        th.style.backgroundColor = getHeaderColor(i);
-        headerRow.appendChild(th);
-      }
-      table.appendChild(headerRow);
-      
-      // Loop to create table rows for multiplication
-      for (let i = 1; i <= 10; i++) {
-        const tr = document.createElement("tr");
-        // Row header for factor 'i'
-        const rowHeader = document.createElement("th");
-        rowHeader.innerText = i;
-        rowHeader.style.backgroundColor = getHeaderColor(i);
-        tr.appendChild(rowHeader);
-        // Loop through columns for multiplication with factors 1..10
-        for (let j = 1; j <= 10; j++) {
-          const td = document.createElement("td");
-          const product = i * j;
-          // Decide to leave blank (as input) based on blankPercentage
-          if (Math.random() < blankPercentage) {
-            totalBlankCells++;
-            // Create an input field for the blank cell
-            const input = document.createElement("input");
-            input.type = "text";
-            input.className = "answer";
-            // Store the correct answer in a data attribute
-            input.dataset.correct = product;
-            // Validate the answer on change
-            input.addEventListener("change", function() {
-              if (input.disabled) return;
-              let userAnswer = parseInt(input.value.trim(), 10);
-              if (userAnswer === product) {
-                input.classList.add("correct");
-                input.disabled = true;
-                score += POINTS_CORRECT;
-                fillAnswersCount++;
-                showMessage("Correct!", "green");
-                playCorrectSound();
-              } else {
-                input.classList.add("incorrect");
-                input.disabled = true;
-                fillModeMistakes++;
-                score -= POINTS_INCORRECT;
-                showMessage("Incorrect! The correct answer was " + product, "red");
-                playWrongSound();
-                // Check mistake tolerance: allowed mistakes = ceil(20% of total blank cells)
-                if (fillModeMistakes > Math.ceil(totalBlankCells * 0.2)) {
-                  gameOver();
-                  return;
-                }
-              }
-              updateInfoPanel();
-              // If all blanks have been addressed, complete the level
-              if (fillAnswersCount + fillModeMistakes === totalBlankCells) {
-                showMessage("Level Complete! Well done!", "blue");
-                document.getElementById("nextLevelBtn").style.display = "inline-block";
-              }
-            });
-            td.appendChild(input);
-          } else {
-            // Display the product directly
-            td.innerText = product;
-          }
-          tr.appendChild(td);
-        }
-        table.appendChild(tr);
-      }
-      // Wrap table in a responsive container for mobile devices
-      const tableContainer = document.createElement("div");
-      tableContainer.className = "table-container";
-      tableContainer.appendChild(table);
-      document.getElementById("gameArea").appendChild(tableContainer);
-      updateInfoPanel();
-      showMessage("Fill in the missing multiplication products.");
-    }
-
-    /********************************************
-     * Level 5–10: Isolated Multiplication Quiz Mode Functions
-     ********************************************/
-    function createQuizMode() {
-      // Set initial variables for quiz mode
-      quizQuestions = [];
-      currentQuestionIndex = 0;
-      quizMistakes = 0;
-      // Determine time limit for the level
-      remainingTime = quizTimeLimits[currentLevel] || 60; // default 60 sec if level not defined
-
-      // Generate 10 random multiplication questions (factors between 1 and 10)
-      for (let i = 0; i < 10; i++) {
-        const factor1 = Math.floor(Math.random() * 10) + 1;
-        const factor2 = Math.floor(Math.random() * 10) + 1;
-        quizQuestions.push({
-          factor1: factor1,
-          factor2: factor2,
-          answer: factor1 * factor2
-        });
-      }
-
-      updateInfoPanel();
-      showMessage("Answer the 10 multiplication questions.");
-
-      // Create the quiz container
-      const quizContainer = document.createElement("div");
-      quizContainer.id = "quizContainer";
-      
-      // Create a div to display the current question
-      const questionDiv = document.createElement("div");
-      questionDiv.id = "currentQuestion";
-      quizContainer.appendChild(questionDiv);
-      
-      // Create an input field for the answer
-      const answerInput = document.createElement("input");
-      answerInput.type = "text";
-      answerInput.id = "quizAnswer";
-      quizContainer.appendChild(answerInput);
-      
-      // Create a submit button for quiz answers
-      const submitBtn = document.createElement("button");
-      submitBtn.innerText = "Submit Answer";
-      submitBtn.addEventListener("click", function() {
-        checkQuizAnswer();
-      });
-      quizContainer.appendChild(submitBtn);
-      
-      document.getElementById("gameArea").appendChild(quizContainer);
-      
-      // Start the countdown timer for quiz mode
-      if (quizTimer) clearInterval(quizTimer);
-      quizTimer = setInterval(function() {
-        remainingTime--;
-        updateInfoPanel();
-        if (remainingTime <= 0) {
-          clearInterval(quizTimer);
-          gameOver();
-        }
-      }, 1000);
-      
-      // Display the first question
-      displayCurrentQuizQuestion();
-    }
-
-    // Displays the current quiz question in quiz mode
-    function displayCurrentQuizQuestion() {
-      if (currentQuestionIndex < quizQuestions.length) {
-        const question = quizQuestions[currentQuestionIndex];
-        document.getElementById("currentQuestion").innerText =
-          "Question " + (currentQuestionIndex + 1) + ": What is " +
-          question.factor1 + " × " + question.factor2 + " ?";
-        // Clear previous answer
-        document.getElementById("quizAnswer").value = "";
-      }
-    }
-
-    // Checks the user's answer for the current quiz question
-    function checkQuizAnswer() {
-      if (currentQuestionIndex >= quizQuestions.length) return;
-      const question = quizQuestions[currentQuestionIndex];
-      const userAnswer = parseInt(document.getElementById("quizAnswer").value.trim(), 10);
-      
-      if (userAnswer === question.answer) {
-        score += POINTS_CORRECT;
-        showMessage("Correct!", "green");
-        playCorrectSound();
-      } else {
-        quizMistakes++;
-        score -= POINTS_INCORRECT;
-        showMessage("Incorrect! The correct answer was " + question.answer, "red");
-        playWrongSound();
-        // Allow only up to 2 mistakes (20% of 10 questions)
-        if (quizMistakes > 2) {
-          clearInterval(quizTimer);
-          gameOver();
-          return;
-        }
-      }
-      currentQuestionIndex++;
-      updateInfoPanel();
-      if (currentQuestionIndex < quizQuestions.length) {
-        displayCurrentQuizQuestion();
-      } else {
-        // Completed all questions within mistake tolerance
-        clearInterval(quizTimer);
-        showMessage("Level Complete! Well done!", "blue");
-        document.getElementById("nextLevelBtn").style.display = "inline-block";
-      }
-    }
-
-    /********************************************
-     * Button Event Listeners
-     ********************************************/
-    document.getElementById("nextLevelBtn").addEventListener("click", function() {
-      document.getElementById("nextLevelBtn").style.display = "none";
-      nextLevel();
-    });
-    document.getElementById("restartBtn").addEventListener("click", function() {
-      document.getElementById("restartBtn").style.display = "none";
-      startGame();
-    });
-
-    /********************************************
-     * Initialize the Game
-     ********************************************/
-    document.addEventListener("DOMContentLoaded", function() {
-      startGame();
-    });
-  </script>
+})();
+</script>
 </body>
 </html>
