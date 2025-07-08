@@ -217,6 +217,7 @@
     btn.onclick = () => {
       if(btn.textContent==='Start'){
         audioCountdown.loop = true;
+        audioCountdown.currentTime = 0;
         audioCountdown.play();
         btn.textContent = 'Submit';
         input.disabled = false;
