@@ -360,6 +360,7 @@
     btn.onclick = () => {
       if(btn.textContent==='Start'){
         audioCountdown.loop = true;
+        audioCountdown.currentTime = 0;
         audioCountdown.play();
         btn.textContent = 'Submit';
         input.disabled = false;
@@ -430,7 +431,9 @@
         <p>Score: ${state.score}</p>
         <button id="replay">Play Again</button>`);
       document.getElementById('replay').onclick = () => {
-        hideOverlay(); startGame();
+        audioCountdown.currentTime = 0;
+        hideOverlay();
+        startGame();
       };
     },200);
   }
@@ -448,7 +451,9 @@
         <p>Score: ${state.score}</p>
         <button id="replay2">Play Again</button>`);
       document.getElementById('replay2').onclick = () => {
-        hideOverlay(); startGame();
+        audioCountdown.currentTime = 0;
+        hideOverlay();
+        startGame();
       };
     },200);
   }
