@@ -9,3 +9,12 @@ This repository contains a small web-based game to practice multiplication table
 3. Scores and the current level are saved in `localStorage`, so your progress and high scores persist between sessions.
 
 Enjoy sharpening your math skills!
+
+## Development
+
+Install dependencies and run the tests using:
+
+```bash
+npm install
+npm test
+```
