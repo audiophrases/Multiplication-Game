@@ -16,8 +16,7 @@
     table { border-collapse: collapse; margin-top:20px; }
     td, th { border:1px solid #666; padding:8px; text-align:center; }
     input.answer { width:50px; text-align:center; font-size:1rem; }
-    #overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7);
-               display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.2rem; }
+    #overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.2rem; }
     #overlay .content { background:#222; padding:20px; border-radius:8px; max-width:90%; text-align:center; }
     #overlay.hidden { display:none; }
   </style>
@@ -366,6 +365,7 @@
     btn.onclick = () => {
       if(btn.textContent==='Start'){
         audioCountdown.loop = true;
+        audioCountdown.currentTime = 0;
         audioCountdown.play();
         btn.textContent = 'Submit';
         input.disabled = false;
@@ -429,14 +429,17 @@
     audioFail.play();
     main.innerHTML = `<h2>Game Over!</h2><p>Your Score: ${state.score}</p>`;
     setTimeout(()=>{
-      const init = prompt('Enter your initials:','').toUpperCase();
+      const input = prompt('Enter your initials:','');
+      const init  = input ? input.toUpperCase() : '';
       if(init) saveHighScore(init, state.score);
       showOverlay(`
         <h2>Game Over</h2>
         <p>Score: ${state.score}</p>
         <button id="replay">Play Again</button>`);
       document.getElementById('replay').onclick = () => {
-        hideOverlay(); startGame();
+        audioCountdown.currentTime = 0;
+        hideOverlay();
+        startGame();
       };
     },200);
   }
@@ -447,14 +450,17 @@
     main.innerHTML = `<h2>🎉 You Won the Game! 🎉</h2>
       <p>Final Score: ${state.score}</p>`;
     setTimeout(()=>{
-      const init = prompt('Enter your initials:','').toUpperCase();
+      const input = prompt('Enter your initials:','');
+      const init  = input ? input.toUpperCase() : '';
       if(init) saveHighScore(init, state.score);
       showOverlay(`
         <h2>Congratulations!</h2>
         <p>Score: ${state.score}</p>
         <button id="replay2">Play Again</button>`);
       document.getElementById('replay2').onclick = () => {
-        hideOverlay(); startGame();
+        audioCountdown.currentTime = 0;
+        hideOverlay();
+        startGame();
       };
     },200);
   }
