@@ -26,7 +26,7 @@
 
 <header>
   <div id="header-info">
-    <span id="levelDisplay">Level: 1</span> |
+    <span id="levelDisplay">Level: 0</span> |
     <span id="scoreDisplay">Score: 0</span>
   </div>
   <button id="highScoresBtn">High Scores</button>
@@ -63,7 +63,7 @@
   ];
 
   // STATE
-  const state = { level:1, score:0, currentTable:null };
+  const state = { level:0, score:0, currentTable:null };
 
   function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
   function loadState(){
@@ -123,11 +123,11 @@
   // FLOW
   function startGame(){
     loadState();
-    if(state.level>1 && confirm(`Continue at Level ${state.level}?`)){
+    if(state.level>0 && confirm(`Continue at Level ${state.level}?`)){
       nextStep();
     } else {
       clearState();
-      state.level=1; state.score=0;
+      state.level=0; state.score=0;
       saveState();
       nextStep();
     }
@@ -136,8 +136,9 @@
   function nextStep(){
     updateHeader();
     if(state.level>10) return winGame();
-    if(state.level%2===1) spinWheel();
-    else                    startQuiz();
+    if(state.level===0)      spinWheel();
+    else if(state.level%2===1) spinWheel();
+    else                        startQuiz();
   }
 
   // WHEEL
@@ -184,14 +185,14 @@
           <button id="gotable">Go!</button>`);
         document.getElementById('gotable').onclick = () => {
           hideOverlay();
-          if(state.level === 1) startAdditionPractice();
+          if(state.level === 0) startAdditionPractice();
           else startFillMode();
         };
       },3000);
     };
   }
 
-  // ADDITION PRACTICE (level 1)
+  // ADDITION PRACTICE (level 0)
   function startAdditionPractice(){
     const n = state.currentTable;
     let step = 0, mistakes = 0, timerId = null;
@@ -237,7 +238,9 @@
           if(step === 10){
             clearInterval(timerId);
             audioCountdown.pause();
+            state.level++; // advance from level 0 to 1
             audioLevelUp.play();
+            updateHeader();
             showOverlay(`
               <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
               <button id="contFill">Continue</button>`);
