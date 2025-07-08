@@ -345,7 +345,8 @@
     audioFail.play();
     main.innerHTML = `<h2>Game Over!</h2><p>Your Score: ${state.score}</p>`;
     setTimeout(()=>{
-      const init = prompt('Enter your initials:','').toUpperCase();
+      const input = prompt('Enter your initials:','');
+      const init  = input ? input.toUpperCase() : '';
       if(init) saveHighScore(init, state.score);
       showOverlay(`
         <h2>Game Over</h2>
@@ -363,7 +364,8 @@
     main.innerHTML = `<h2>🎉 You Won the Game! 🎉</h2>
       <p>Final Score: ${state.score}</p>`;
     setTimeout(()=>{
-      const init = prompt('Enter your initials:','').toUpperCase();
+      const input = prompt('Enter your initials:','');
+      const init  = input ? input.toUpperCase() : '';
       if(init) saveHighScore(init, state.score);
       showOverlay(`
         <h2>Congratulations!</h2>
