@@ -193,12 +193,12 @@
   // ADDITION PRACTICE (level 1)
   function startAdditionPractice(){
     const n = state.currentTable;
-    let step = 0, mistakes = 0, timerId = null;
+    let step = 0, mistakes = 0;
+    let startTime = null;
 
     main.innerHTML = `
       <h2>Practice Adding ${n}</h2>
-      <p>Time: <span id="time">60</span>s |
-         Mistakes: <span id="mcount">0</span>/2</p>
+      <p>Mistakes: <span id="mcount">0</span>/2</p>
       <div id="addQ">0 + ${n} = </div>
       <input id="addAns" class="answer" disabled />
       <button id="addSubmit">Start</button>
@@ -207,38 +207,29 @@
     const btn   = document.getElementById('addSubmit');
     const input = document.getElementById('addAns');
     const qEl   = document.getElementById('addQ');
-    const timeE = document.getElementById('time');
     const mE    = document.getElementById('mcount');
 
     btn.onclick = () => {
       if(btn.textContent==='Start'){
-        audioCountdown.loop = true;
-        audioCountdown.play();
         btn.textContent = 'Submit';
         input.disabled = false;
         input.focus();
-        timerId = setInterval(()=>{
-          let t = parseInt(timeE.textContent,10) - 1;
-          timeE.textContent = t;
-          if(t <= 0){
-            clearInterval(timerId);
-            audioCountdown.pause();
-            return gameOver();
-          }
-        },1000);
+        startTime = Date.now();
       } else {
         const ans = parseInt(input.value,10);
         if(ans === (step+1)*n){
-          state.score += 5;
           audioSuccess.play();
           step++;
-          updateHeader();
           if(step === 10){
-            clearInterval(timerId);
-            audioCountdown.pause();
+            const timeTaken = Math.round((Date.now() - startTime)/1000);
+            const points = Math.max(0, 50 - mistakes*5 - timeTaken);
+            state.score += points;
             audioLevelUp.play();
+            updateHeader();
             showOverlay(`
               <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+              <p>Time: ${timeTaken}s | Errors: ${mistakes}</p>
+              <p>Points: ${points}</p>
               <button id="contFill">Continue</button>`);
             document.getElementById('contFill').onclick = () => {
               hideOverlay();
@@ -251,13 +242,9 @@
           input.focus();
         } else {
           mistakes++;
-          state.score -= 2;
           audioFail.play();
-          updateHeader();
           mE.textContent = mistakes;
           if(mistakes > 2){
-            clearInterval(timerId);
-            audioCountdown.pause();
             return gameOver();
           }
           input.value = '';
@@ -272,23 +259,35 @@
     const n = state.currentTable;
     const bmap={1:4,3:4,5:5,7:6,9:7};
     const blankCount = bmap[state.level]||4;
+    let startTime = null;
     const allowedMist = Math.floor(blankCount * 0.33);
     const all = Array.from({length:10},(_,i)=>i+1);
     const blanks = shuffle(all.slice()).slice(0,blankCount);
 
     main.innerHTML = `<h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
-      <table>
+      <p>Press Start when you're ready.</p>
+      <table id="fillTbl" style="display:none">
         <tr><th>Q</th><th>Answer</th></tr>
         ${all.map(i=>`
           <tr>
             <td>${n} × ${i} =</td>
             <td>${
               blanks.includes(i)
-                ? `<input class="answer" id="ans${i}" />`
+                ? `<input class="answer" id="ans${i}" disabled />`
                 : `<strong>${n*i}</strong>`
             }</td>
           </tr>`).join('')}
-      </table>`;
+      </table>
+      <button id="fillStart">Start</button>`;
+
+    const startBtn = document.getElementById('fillStart');
+    const tbl     = document.getElementById('fillTbl');
+    startBtn.onclick = () => {
+      startBtn.style.display = 'none';
+      tbl.style.display = 'table';
+      blanks.forEach(i => document.getElementById(`ans${i}`).disabled = false);
+      startTime = Date.now();
+    };
 
     // Validate on blur
     blanks.forEach(i => {
@@ -319,12 +318,15 @@
           return gameOver();
         }
         // Success
+        const timeTaken = Math.round((Date.now() - startTime)/1000);
+        const points = Math.max(0, blanks.length*10 - mistakes*5 - timeTaken);
+        state.score += points;
         audioLevelUp.play();
-        state.score += blanks.length*10 - mistakes*5;
         updateHeader();
         showOverlay(`
           <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-          <p>Errors: ${mistakes}/${allowedMist}</p>
+          <p>Time: ${timeTaken}s | Errors: ${mistakes}/${allowedMist}</p>
+          <p>Points: ${points}</p>
           <button id="nextlvl">Next Level</button>`);
         document.getElementById('nextlvl').onclick = () => {
           hideOverlay();
@@ -339,13 +341,13 @@
   // QUIZ (even levels)
   function startQuiz(){
     const n = state.currentTable;
-    let mistakes=0, qIdx=0, timerId=null;
+    let mistakes=0, qIdx=0;
+    let startTime=null;
     const questions = shuffle(Array.from({length:10},(_,i)=>i+1));
 
     main.innerHTML = `
-      <h2>Table of ${n} — Quiz (120s, max 2 mistakes)</h2>
-      <p>Time: <span id="time">120</span>s |
-         Mistakes: <span id="mcount">0</span>/2</p>
+      <h2>Table of ${n} — Quiz (max 2 mistakes)</h2>
+      <p>Mistakes: <span id="mcount">0</span>/2</p>
       <div id="question">Press Start</div>
       <input id="qans" class="answer" disabled />
       <button id="submitQ">Start</button>
@@ -353,49 +355,38 @@
 
     const btn   = document.getElementById('submitQ');
     const input = document.getElementById('qans');
-    const timeE = document.getElementById('time');
     const mE    = document.getElementById('mcount');
 
     btn.onclick = () => {
       if(btn.textContent==='Start'){
-        audioCountdown.loop = true;
-        audioCountdown.currentTime = 0;
-        audioCountdown.play();
         btn.textContent = 'Submit';
         input.disabled = false;
         input.focus();
-        timerId = setInterval(()=>{
-          let t = parseInt(timeE.textContent,10) - 1;
-          timeE.textContent = t;
-          if(t <= 0){
-            clearInterval(timerId);
-            audioCountdown.pause();
-            return gameOver();
-          }
-        },1000);
+        startTime = Date.now();
         showNext();
       } else {
         const ans = parseInt(input.value,10);
         const corr= n * questions[qIdx];
         if(ans===corr){
-          state.score+=10; audioSuccess.play();
+          audioSuccess.play();
         } else {
-          mistakes++; state.score-=5; audioFail.play();
+          mistakes++; audioFail.play();
         }
-        updateHeader();
         mE.textContent = mistakes;
         if(mistakes>2){
-          clearInterval(timerId);
-          audioCountdown.pause();
           return gameOver();
         }
         qIdx++;
         if(qIdx>=questions.length){
-          clearInterval(timerId);
-          audioCountdown.pause();
+          const timeTaken = Math.round((Date.now() - startTime)/1000);
+          const points = Math.max(0, 100 - mistakes*5 - timeTaken);
+          state.score += points;
           audioLevelUp.play();
+          updateHeader();
           showOverlay(`
             <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+            <p>Time: ${timeTaken}s | Errors: ${mistakes}</p>
+            <p>Points: ${points}</p>
             <button id="nextlvl2">Next Level</button>`);
           document.getElementById('nextlvl2').onclick = () => {
             hideOverlay();
