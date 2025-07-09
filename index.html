@@ -259,6 +259,7 @@
     const n = state.currentTable;
     const bmap={1:4,3:4,5:5,7:6,9:7};
     const blankCount = bmap[state.level]||4;
+
     const startTime = Date.now();
     const allowedMist = Math.floor(blankCount * 0.33);
     const all = Array.from({length:10},(_,i)=>i+1);
@@ -277,6 +278,7 @@
             }</td>
           </tr>`).join('')}
       </table>`;
+
 
     // Validate on blur
     blanks.forEach(i => {
