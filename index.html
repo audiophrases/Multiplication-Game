@@ -25,7 +25,7 @@
 
 <header>
   <div id="header-info">
-    <span id="levelDisplay">Level: 1</span> |
+    <span id="levelDisplay">Level: 0</span> |
     <span id="scoreDisplay">Score: 0</span>
   </div>
   <button id="highScoresBtn">High Scores</button>
@@ -62,7 +62,7 @@
   ];
 
   // STATE
-  const state = { level:1, score:0, currentTable:null };
+  const state = { level:0, score:0, currentTable:null };
 
   function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
   function loadState(){
@@ -122,21 +122,25 @@
   // FLOW
   function startGame(){
     loadState();
-    if(state.level>1 && confirm(`Continue at Level ${state.level}?`)){
-      nextStep();
-    } else {
-      clearState();
-      state.level=1; state.score=0;
-      saveState();
-      nextStep();
+    if(state.level > 0){
+      if(confirm(`Continue at Level ${state.level}?`)){
+        nextStep();
+        return;
+      }
     }
+    clearState();
+    state.level = 0;
+    state.score = 0;
+    saveState();
+    nextStep();
   }
 
   function nextStep(){
     updateHeader();
     if(state.level>10) return winGame();
-    if(state.level%2===1) spinWheel();
-    else                    startQuiz();
+    if(state.level===0)      spinWheel();
+    else if(state.level%2===1) spinWheel();
+    else                        startQuiz();
   }
 
   // WHEEL
@@ -183,13 +187,28 @@
           <button id="gotable">Go!</button>`);
         document.getElementById('gotable').onclick = () => {
           hideOverlay();
+
+          if(state.level === 0) startAdditionPractice();
+=======
           if(state.level === 1) startAdditionPractice();
+
           else startFillMode();
         };
       },3000);
     };
   }
 
+
+  // ADDITION PRACTICE (level 0)
+  function startAdditionPractice(){
+    const n = state.currentTable;
+    let step = 0, mistakes = 0, timerId = null;
+
+    main.innerHTML = `
+      <h2>Practice Adding ${n}</h2>
+      <p>Time: <span id="time">60</span>s |
+         Mistakes: <span id="mcount">0</span>/2</p>
+=======
   // ADDITION PRACTICE (level 1)
   function startAdditionPractice(){
     const n = state.currentTable;
@@ -199,6 +218,7 @@
     main.innerHTML = `
       <h2>Practice Adding ${n}</h2>
       <p>Mistakes: <span id="mcount">0</span>/2</p>
+
       <div id="addQ">0 + ${n} = </div>
       <input id="addAns" class="answer" disabled />
       <button id="addSubmit">Start</button>
@@ -207,10 +227,42 @@
     const btn   = document.getElementById('addSubmit');
     const input = document.getElementById('addAns');
     const qEl   = document.getElementById('addQ');
+
+    const timeE = document.getElementById('time');
+=======
+
     const mE    = document.getElementById('mcount');
 
     btn.onclick = () => {
       if(btn.textContent==='Start'){
+
+        audioCountdown.loop = true;
+        audioCountdown.currentTime = 0;
+        audioCountdown.play();
+        btn.textContent = 'Submit';
+        input.disabled = false;
+        input.focus();
+        timerId = setInterval(()=>{
+          let t = parseInt(timeE.textContent,10) - 1;
+          timeE.textContent = t;
+          if(t <= 0){
+            clearInterval(timerId);
+            audioCountdown.pause();
+            return gameOver();
+          }
+        },1000);
+      } else {
+        const ans = parseInt(input.value,10);
+        if(ans === (step+1)*n){
+          state.score += 5;
+          audioSuccess.play();
+          step++;
+          updateHeader();
+          if(step === 10){
+            clearInterval(timerId);
+            audioCountdown.pause();
+            state.level++; // advance from level 0 to 1
+=======
         btn.textContent = 'Submit';
         input.disabled = false;
         input.focus();
@@ -224,12 +276,16 @@
             const timeTaken = Math.round((Date.now() - startTime)/1000);
             const points = Math.max(0, 50 - mistakes*5 - timeTaken);
             state.score += points;
+
             audioLevelUp.play();
             updateHeader();
             showOverlay(`
               <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+
+=======
               <p>Time: ${timeTaken}s | Errors: ${mistakes}</p>
               <p>Points: ${points}</p>
+
               <button id="contFill">Continue</button>`);
             document.getElementById('contFill').onclick = () => {
               hideOverlay();
@@ -242,9 +298,19 @@
           input.focus();
         } else {
           mistakes++;
+
+          state.score -= 2;
+          audioFail.play();
+          updateHeader();
+          mE.textContent = mistakes;
+          if(mistakes > 2){
+            clearInterval(timerId);
+            audioCountdown.pause();
+=======
           audioFail.play();
           mE.textContent = mistakes;
           if(mistakes > 2){
+
             return gameOver();
           }
           input.value = '';
@@ -255,11 +321,18 @@
   }
 
   // FILL-IN (odd levels)
+
+  function startFillMode(){
+    const n = state.currentTable;
+    const bmap={1:4,3:4,5:5,7:6,9:7};
+    const blankCount = bmap[state.level]||4;
+=======
   function startFillMode(){
     const n = state.currentTable;
     const bmap={1:4,3:4,5:5,7:6,9:7};
     const blankCount = bmap[state.level]||4;
     const startTime = Date.now();
+
     const allowedMist = Math.floor(blankCount * 0.33);
     const all = Array.from({length:10},(_,i)=>i+1);
     const blanks = shuffle(all.slice()).slice(0,blankCount);
@@ -348,12 +421,32 @@
 
     btn.onclick = () => {
       if(btn.textContent==='Start'){
+
+        audioCountdown.loop = true;
+        audioCountdown.currentTime = 0;
+        audioCountdown.play();
+        btn.textContent = 'Submit';
+        input.disabled = false;
+        input.focus();
+        timerId = setInterval(()=>{
+          let t = parseInt(timeE.textContent,10) - 1;
+          timeE.textContent = t;
+          if(t <= 0){
+            clearInterval(timerId);
+            audioCountdown.pause();
+            return gameOver();
+          }
+        },1000);
+        showNext();
+      } else {
+=======
         btn.textContent = 'Submit';
         input.disabled = false;
         input.focus();
         startTime = Date.now();
         showNext();
       } else {
+
         const ans = parseInt(input.value,10);
         const corr= n * questions[qIdx];
         if(ans===corr){
