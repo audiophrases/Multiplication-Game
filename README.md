@@ -6,7 +6,7 @@ This repository contains a small web-based game to practice multiplication table
 
 1. Open `index.html` in any modern browser. No additional setup is required.
 
-2. Follow the prompts to spin the wheel, practice addition and multiplication, and progress through the levels. There is no time limit while playing, but the time you take and your mistakes determine the points you earn at the end of each level.
+2. Follow the prompts to spin the wheel, practice addition and multiplication, and progress through the levels. Each challenge begins when you press its **Start** button, and the time from starting until completion along with your mistakes determines the points you earn at the end of the level.
 
 3. Scores and the current level are saved in `localStorage`, so your progress and high scores persist between sessions.
 
