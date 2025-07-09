@@ -187,13 +187,18 @@
           <button id="gotable">Go!</button>`);
         document.getElementById('gotable').onclick = () => {
           hideOverlay();
+
           if(state.level === 0) startAdditionPractice();
+=======
+          if(state.level === 1) startAdditionPractice();
+ main
           else startFillMode();
         };
       },3000);
     };
   }
 
+ 41bd4c-codex/enhance-multiplication-tables-user-experience
   // ADDITION PRACTICE (level 0)
   function startAdditionPractice(){
     const n = state.currentTable;
@@ -203,6 +208,17 @@
       <h2>Practice Adding ${n}</h2>
       <p>Time: <span id="time">60</span>s |
          Mistakes: <span id="mcount">0</span>/2</p>
+=======
+  // ADDITION PRACTICE (level 1)
+  function startAdditionPractice(){
+    const n = state.currentTable;
+    let step = 0, mistakes = 0;
+    let startTime = null;
+
+    main.innerHTML = `
+      <h2>Practice Adding ${n}</h2>
+      <p>Mistakes: <span id="mcount">0</span>/2</p>
+ main
       <div id="addQ">0 + ${n} = </div>
       <input id="addAns" class="answer" disabled />
       <button id="addSubmit">Start</button>
@@ -211,11 +227,15 @@
     const btn   = document.getElementById('addSubmit');
     const input = document.getElementById('addAns');
     const qEl   = document.getElementById('addQ');
+ 41bd4c-codex/enhance-multiplication-tables-user-experience
     const timeE = document.getElementById('time');
+=======
+ main
     const mE    = document.getElementById('mcount');
 
     btn.onclick = () => {
       if(btn.textContent==='Start'){
+ 41bd4c-codex/enhance-multiplication-tables-user-experience
         audioCountdown.loop = true;
         audioCountdown.currentTime = 0;
         audioCountdown.play();
@@ -242,10 +262,30 @@
             clearInterval(timerId);
             audioCountdown.pause();
             state.level++; // advance from level 0 to 1
+=======
+        btn.textContent = 'Submit';
+        input.disabled = false;
+        input.focus();
+        startTime = Date.now();
+      } else {
+        const ans = parseInt(input.value,10);
+        if(ans === (step+1)*n){
+          audioSuccess.play();
+          step++;
+          if(step === 10){
+            const timeTaken = Math.round((Date.now() - startTime)/1000);
+            const points = Math.max(0, 50 - mistakes*5 - timeTaken);
+            state.score += points;
+ main
             audioLevelUp.play();
             updateHeader();
             showOverlay(`
               <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+ 41bd4c-codex/enhance-multiplication-tables-user-experience
+=======
+              <p>Time: ${timeTaken}s | Errors: ${mistakes}</p>
+              <p>Points: ${points}</p>
+ main
               <button id="contFill">Continue</button>`);
             document.getElementById('contFill').onclick = () => {
               hideOverlay();
@@ -258,6 +298,7 @@
           input.focus();
         } else {
           mistakes++;
+ 41bd4c-codex/enhance-multiplication-tables-user-experience
           state.score -= 2;
           audioFail.play();
           updateHeader();
@@ -265,6 +306,11 @@
           if(mistakes > 2){
             clearInterval(timerId);
             audioCountdown.pause();
+=======
+          audioFail.play();
+          mE.textContent = mistakes;
+          if(mistakes > 2){
+ main
             return gameOver();
           }
           input.value = '';
@@ -275,10 +321,18 @@
   }
 
   // FILL-IN (odd levels)
+ 41bd4c-codex/enhance-multiplication-tables-user-experience
   function startFillMode(){
     const n = state.currentTable;
     const bmap={1:4,3:4,5:5,7:6,9:7};
     const blankCount = bmap[state.level]||4;
+=======
+  function startFillMode(){
+    const n = state.currentTable;
+    const bmap={1:4,3:4,5:5,7:6,9:7};
+    const blankCount = bmap[state.level]||4;
+    const startTime = Date.now();
+ main
     const allowedMist = Math.floor(blankCount * 0.33);
     const all = Array.from({length:10},(_,i)=>i+1);
     const blanks = shuffle(all.slice()).slice(0,blankCount);
@@ -326,12 +380,15 @@
           return gameOver();
         }
         // Success
+        const timeTaken = Math.round((Date.now() - startTime)/1000);
+        const points = Math.max(0, blanks.length*10 - mistakes*5 - timeTaken);
+        state.score += points;
         audioLevelUp.play();
-        state.score += blanks.length*10 - mistakes*5;
         updateHeader();
         showOverlay(`
           <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-          <p>Errors: ${mistakes}/${allowedMist}</p>
+          <p>Time: ${timeTaken}s | Errors: ${mistakes}/${allowedMist}</p>
+          <p>Points: ${points}</p>
           <button id="nextlvl">Next Level</button>`);
         document.getElementById('nextlvl').onclick = () => {
           hideOverlay();
@@ -346,13 +403,13 @@
   // QUIZ (even levels)
   function startQuiz(){
     const n = state.currentTable;
-    let mistakes=0, qIdx=0, timerId=null;
+    let mistakes=0, qIdx=0;
+    let startTime=null;
     const questions = shuffle(Array.from({length:10},(_,i)=>i+1));
 
     main.innerHTML = `
-      <h2>Table of ${n} — Quiz (120s, max 2 mistakes)</h2>
-      <p>Time: <span id="time">120</span>s |
-         Mistakes: <span id="mcount">0</span>/2</p>
+      <h2>Table of ${n} — Quiz (max 2 mistakes)</h2>
+      <p>Mistakes: <span id="mcount">0</span>/2</p>
       <div id="question">Press Start</div>
       <input id="qans" class="answer" disabled />
       <button id="submitQ">Start</button>
@@ -360,11 +417,11 @@
 
     const btn   = document.getElementById('submitQ');
     const input = document.getElementById('qans');
-    const timeE = document.getElementById('time');
     const mE    = document.getElementById('mcount');
 
     btn.onclick = () => {
       if(btn.textContent==='Start'){
+ 41bd4c-codex/enhance-multiplication-tables-user-experience
         audioCountdown.loop = true;
         audioCountdown.currentTime = 0;
         audioCountdown.play();
@@ -382,27 +439,36 @@
         },1000);
         showNext();
       } else {
+=======
+        btn.textContent = 'Submit';
+        input.disabled = false;
+        input.focus();
+        startTime = Date.now();
+        showNext();
+      } else {
+ main
         const ans = parseInt(input.value,10);
         const corr= n * questions[qIdx];
         if(ans===corr){
-          state.score+=10; audioSuccess.play();
+          audioSuccess.play();
         } else {
-          mistakes++; state.score-=5; audioFail.play();
+          mistakes++; audioFail.play();
         }
-        updateHeader();
         mE.textContent = mistakes;
         if(mistakes>2){
-          clearInterval(timerId);
-          audioCountdown.pause();
           return gameOver();
         }
         qIdx++;
         if(qIdx>=questions.length){
-          clearInterval(timerId);
-          audioCountdown.pause();
+          const timeTaken = Math.round((Date.now() - startTime)/1000);
+          const points = Math.max(0, 100 - mistakes*5 - timeTaken);
+          state.score += points;
           audioLevelUp.play();
+          updateHeader();
           showOverlay(`
             <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+            <p>Time: ${timeTaken}s | Errors: ${mistakes}</p>
+            <p>Points: ${points}</p>
             <button id="nextlvl2">Next Level</button>`);
           document.getElementById('nextlvl2').onclick = () => {
             hideOverlay();
