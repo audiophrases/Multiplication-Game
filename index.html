@@ -259,35 +259,26 @@
     const n = state.currentTable;
     const bmap={1:4,3:4,5:5,7:6,9:7};
     const blankCount = bmap[state.level]||4;
-    let startTime = null;
+
+    const startTime = Date.now();
     const allowedMist = Math.floor(blankCount * 0.33);
     const all = Array.from({length:10},(_,i)=>i+1);
     const blanks = shuffle(all.slice()).slice(0,blankCount);
 
     main.innerHTML = `<h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
-      <p>Press Start when you're ready.</p>
-      <table id="fillTbl" style="display:none">
+      <table>
         <tr><th>Q</th><th>Answer</th></tr>
         ${all.map(i=>`
           <tr>
             <td>${n} × ${i} =</td>
             <td>${
               blanks.includes(i)
-                ? `<input class="answer" id="ans${i}" disabled />`
+                ? `<input class="answer" id="ans${i}" />`
                 : `<strong>${n*i}</strong>`
             }</td>
           </tr>`).join('')}
-      </table>
-      <button id="fillStart">Start</button>`;
+      </table>`;
 
-    const startBtn = document.getElementById('fillStart');
-    const tbl     = document.getElementById('fillTbl');
-    startBtn.onclick = () => {
-      startBtn.style.display = 'none';
-      tbl.style.display = 'table';
-      blanks.forEach(i => document.getElementById(`ans${i}`).disabled = false);
-      startTime = Date.now();
-    };
 
     // Validate on blur
     blanks.forEach(i => {
