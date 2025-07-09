@@ -260,7 +260,7 @@
     const bmap={1:4,3:4,5:5,7:6,9:7};
     const blankCount = bmap[state.level]||4;
 
-    const startTime = Date.now();
+    let startTime = null;
     const allowedMist = Math.floor(blankCount * 0.33);
     const all = Array.from({length:10},(_,i)=>i+1);
     const blanks = shuffle(all.slice()).slice(0,blankCount);
@@ -273,11 +273,23 @@
             <td>${n} × ${i} =</td>
             <td>${
               blanks.includes(i)
-                ? `<input class="answer" id="ans${i}" />`
+                ? `<input class="answer" id="ans${i}" disabled />`
                 : `<strong>${n*i}</strong>`
             }</td>
           </tr>`).join('')}
-      </table>`;
+      </table>
+      <button id="fillStartBtn">Start</button>`;
+
+    const startBtn = document.getElementById('fillStartBtn');
+    startBtn.onclick = () => {
+      startBtn.remove();
+      blanks.forEach(j => {
+        const inp = document.getElementById(`ans${j}`);
+        inp.disabled = false;
+      });
+      document.getElementById(`ans${blanks[0]}`).focus();
+      startTime = Date.now();
+    };
 
 
     // Validate on blur
