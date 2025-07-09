@@ -183,14 +183,13 @@
           <button id="gotable">Go!</button>`);
         document.getElementById('gotable').onclick = () => {
           hideOverlay();
-          if(state.level === 1) startAdditionPractice();
-          else startFillMode();
+          startAdditionPractice();
         };
       },3000);
     };
   }
 
-  // ADDITION PRACTICE (level 1)
+  // ADDITION PRACTICE
   function startAdditionPractice(){
     const n = state.currentTable;
     let step = 0, mistakes = 0;
