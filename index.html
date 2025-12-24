@@ -64,6 +64,20 @@
   // STATE
   const state = { level:1, score:0, currentTable:null };
 
+  function setNumericInput(input){
+    input.setAttribute('inputmode','numeric');
+    input.setAttribute('pattern','[0-9]*');
+  }
+
+  function attachEnterSubmit(input, btn){
+    input.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        btn.click();
+      }
+    });
+  }
+
   function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
   function loadState(){
     const s = localStorage.getItem(GAME_KEY);
@@ -208,6 +222,9 @@
     const qEl   = document.getElementById('addQ');
     const mE    = document.getElementById('mcount');
 
+    setNumericInput(input);
+    attachEnterSubmit(input, btn);
+
     btn.onclick = () => {
       if(btn.textContent==='Start'){
         btn.textContent = 'Submit';
@@ -272,7 +289,7 @@
             <td>${n} × ${i} =</td>
             <td>${
               blanks.includes(i)
-                ? `<input class="answer" id="ans${i}" disabled />`
+                ? `<input class="answer" id="ans${i}" disabled inputmode="numeric" pattern="[0-9]*" />`
                 : `<strong>${n*i}</strong>`
             }</td>
           </tr>`).join('')}
@@ -294,6 +311,22 @@
     // Validate on blur
     blanks.forEach(i => {
       const inp = document.getElementById(`ans${i}`);
+      setNumericInput(inp);
+      inp.addEventListener('keydown', (e) => {
+        if(e.key === 'Enter' && !inp.disabled){
+          e.preventDefault();
+          inp.blur();
+          const idx = blanks.indexOf(i);
+          for(let offset=1; offset<blanks.length; offset++){
+            const nextIdx = blanks[(idx+offset)%blanks.length];
+            const nextEl = document.getElementById(`ans${nextIdx}`);
+            if(nextEl && !nextEl.disabled && nextEl.value===''){
+              nextEl.focus();
+              break;
+            }
+          }
+        }
+      });
       inp.addEventListener('blur', () => {
         const val = parseInt(inp.value,10);
         if(inp.value===''){
@@ -358,6 +391,9 @@
     const btn   = document.getElementById('submitQ');
     const input = document.getElementById('qans');
     const mE    = document.getElementById('mcount');
+
+    setNumericInput(input);
+    attachEnterSubmit(input, btn);
 
     btn.onclick = () => {
       if(btn.textContent==='Start'){
