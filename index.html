@@ -4,20 +4,127 @@
   <meta charset="UTF-8">
   <title>Multiplication Mania!</title>
   <style>
-    * { box-sizing: border-box; font-family: sans-serif; }
-    body { margin:0; padding:0; display:flex; flex-direction:column; height:100vh; }
-    header, footer { background:#333; color:#fff; padding:10px; text-align:center; }
-    main { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }
-    #header-info { margin-bottom:10px; }
-    button { padding:10px 20px; margin:5px; font-size:1rem; cursor:pointer; }
-    #wheelCanvas { border:2px solid #333; border-radius:50%; }
+    :root {
+      --primary: #4b9cff;
+      --secondary: #ffcc4b;
+      --bg: radial-gradient(circle at top left, #f7fbff, #dfe9f7);
+    }
+
+    * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background: var(--bg);
+      color: #0f1b2d;
+      font-size: clamp(18px, 2vw, 22px);
+    }
+
+    header, footer {
+      background: linear-gradient(90deg, #0f1b2d, #183c5a);
+      color: #fff;
+      padding: 18px 20px;
+      text-align: center;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      letter-spacing: 0.3px;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    #header-info { font-size: 1.2em; font-weight: 700; }
+    #header-info span { margin: 0 8px; }
+
+    button {
+      padding: 16px 26px;
+      margin: 8px;
+      font-size: 1.05em;
+      font-weight: 700;
+      cursor: pointer;
+      border-radius: 12px;
+      border: none;
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+      transition: transform 0.08s ease, box-shadow 0.08s ease;
+    }
+
+    button:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(0,0,0,0.18); }
+    button:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(0,0,0,0.16); }
+    button:disabled { background:#9fbada; cursor: not-allowed; box-shadow:none; }
+
+    .secondary { background: var(--secondary); color: #1e2e3a; }
+
+    .card {
+      background: #fff;
+      padding: clamp(22px, 3vw, 32px);
+      border-radius: 18px;
+      box-shadow: 0 10px 26px rgba(0,0,0,0.15);
+      max-width: 960px;
+      width: 100%;
+      text-align: center;
+    }
+
+    h1, h2, h3 { margin: 0 0 12px 0; font-weight: 800; }
+    .subtitle { margin: 6px 0 18px; color: #354b63; }
+
+    #wheelCanvas { border:4px solid #0f1b2d; border-radius:50%; max-width: 360px; width:100%; height:auto; }
     @keyframes spin { from { transform:rotate(0deg);} to{transform:rotate(360deg);} }
     #wheelCanvas.spinning { animation: spin 1s linear 3; }
-    table { border-collapse: collapse; margin-top:20px; }
-    td, th { border:1px solid #666; padding:8px; text-align:center; }
-    input.answer { width:50px; text-align:center; font-size:1rem; }
-    #overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.2rem; }
-    #overlay .content { background:#222; padding:20px; border-radius:8px; max-width:90%; text-align:center; }
+
+    .question {
+      font-size: clamp(2.2rem, 5vw, 3.4rem);
+      font-weight: 800;
+      margin: 16px 0 12px;
+      color: #0f1b2d;
+    }
+
+    .voice-status {
+      font-size: 1.05em;
+      color: #354b63;
+      min-height: 32px;
+      margin-bottom: 10px;
+    }
+
+    .bad { color: #c0392b; font-weight: 700; }
+    .good { color: #1e8449; font-weight: 700; }
+
+    table { border-collapse: collapse; margin: 18px auto; width: 100%; max-width: 640px; font-size: 1.05em; }
+    td, th { border: 1px solid #c6d2e2; padding: 10px 14px; text-align: center; }
+    th { background: #f1f6fb; }
+
+    .table-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+      margin: 12px 0 4px;
+      color: #1b3145;
+      font-weight: 600;
+    }
+
+    #overlay {
+      position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.7);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:1.2rem;
+      padding: 14px;
+    }
+    #overlay .content {
+      background:#112132;
+      padding:28px;
+      border-radius:14px;
+      max-width: 520px;
+      width: 100%;
+      text-align:center;
+      box-shadow:0 10px 22px rgba(0,0,0,0.35);
+    }
     #overlay.hidden { display:none; }
   </style>
 </head>
@@ -25,10 +132,11 @@
 
 <header>
   <div id="header-info">
-    <span id="levelDisplay">Level: 1</span> |
+    <span id="levelDisplay">Level: 1</span>
+    <span aria-hidden="true">|</span>
     <span id="scoreDisplay">Score: 0</span>
   </div>
-  <button id="highScoresBtn">High Scores</button>
+  <button id="highScoresBtn" class="secondary">High Scores</button>
 </header>
 
 <main id="main"></main>
@@ -50,6 +158,11 @@
   const audioSpin      = new Audio('spin.mp3');
   const audioLevelUp   = new Audio('level-up.mp3');
 
+  // SPEECH
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let activeRecognizer = null;
+  let keepListening = false;
+
   // KEYS
   const GAME_KEY = 'mulGameState';
   const HS_KEY   = 'mulHighScores';
@@ -63,20 +176,6 @@
 
   // STATE
   const state = { level:1, score:0, currentTable:null };
-
-  function setNumericInput(input){
-    input.setAttribute('inputmode','numeric');
-    input.setAttribute('pattern','[0-9]*');
-  }
-
-  function attachEnterSubmit(input, btn){
-    input.addEventListener('keydown', (e) => {
-      if(e.key === 'Enter'){
-        e.preventDefault();
-        btn.click();
-      }
-    });
-  }
 
   function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
   function loadState(){
@@ -110,6 +209,7 @@
   }
 
   function showOverlay(html){
+    stopListening();
     overlayContent.innerHTML = html;
     overlay.classList.remove('hidden');
   }
@@ -133,8 +233,107 @@
     }
   };
 
+  // SPEECH HELPERS
+  function stopListening(){
+    keepListening = false;
+    if(activeRecognizer){
+      activeRecognizer.onresult = null;
+      activeRecognizer.onerror = null;
+      activeRecognizer.onend = null;
+      try { activeRecognizer.stop(); } catch(_) {}
+      activeRecognizer = null;
+    }
+  }
+
+  function requireSpeechRecognition(){
+    if(!SpeechRecognition){
+      showOverlay(`<h2>Voice input unavailable</h2><p>Your browser needs speech recognition (try Chrome or Edge). Keyboard play isn't required, but you may need a supported browser.</p>`);
+      return false;
+    }
+    return true;
+  }
+
+  function parseSpokenNumber(text){
+    if(!text) return NaN;
+    const cleaned = text.toLowerCase();
+    const digitMatch = cleaned.match(/\d+/);
+    if(digitMatch) return parseInt(digitMatch[0],10);
+
+    const words = cleaned.replace(/[^a-z\s-]/g,' ').split(/\s+/).filter(Boolean);
+    const map = {
+      zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9,
+      ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19,
+      twenty:20, thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90,
+      hundred:100
+    };
+    let total = 0; let current = 0; let found = false;
+    words.forEach(w => {
+      const val = map[w];
+      if(val === undefined) return;
+      found = true;
+      if(val === 100){
+        current = Math.max(1, current) * val;
+      } else if(val >= 20){
+        current += val;
+      } else {
+        current += val;
+      }
+    });
+    if(found){
+      total += current;
+      return total;
+    }
+    return NaN;
+  }
+
+  function listenForNumber(expected, statusEl, onCorrect, onMismatch){
+    if(!requireSpeechRecognition()) return;
+    stopListening();
+    keepListening = true;
+
+    const startRecognition = () => {
+      if(!keepListening) return;
+      statusEl.textContent = 'Listening...';
+      const rec = new SpeechRecognition();
+      activeRecognizer = rec;
+      rec.lang = 'en-US';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.continuous = false;
+
+      rec.onresult = (e) => {
+        const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ');
+        const val = parseSpokenNumber(transcript);
+        if(val === expected){
+          keepListening = false;
+          statusEl.innerHTML = `<span class="good">Heard "${transcript.trim()}" → ${val}. Correct!</span>`;
+          audioSuccess.play();
+          rec.stop();
+          setTimeout(() => onCorrect(transcript.trim(), val), 600);
+        } else {
+          onMismatch && onMismatch(val, transcript.trim());
+          audioFail.play();
+          statusEl.innerHTML = `<span class="bad">Heard "${transcript.trim()}"${isNaN(val)?'':` → ${val}`} — try again.</span>`;
+        }
+      };
+
+      rec.onerror = () => {
+        statusEl.textContent = 'Had trouble hearing you. Trying again...';
+      };
+
+      rec.onend = () => {
+        if(keepListening) setTimeout(startRecognition, 250);
+      };
+
+      rec.start();
+    };
+
+    startRecognition();
+  }
+
   // FLOW
   function startGame(){
+    stopListening();
     loadState();
     if(state.level>1 && confirm(`Continue at Level ${state.level}?`)){
       nextStep();
@@ -155,29 +354,35 @@
 
   // WHEEL
   function spinWheel(){
+    stopListening();
     main.innerHTML = `
-      <canvas id="wheelCanvas" width="300" height="300"></canvas>
-      <button id="spinBtn">Spin the Wheel</button>`;
+      <div class="card">
+        <h2>Spin to pick a table</h2>
+        <canvas id="wheelCanvas" width="360" height="360"></canvas>
+        <p class="subtitle">Every table up to 10 is waiting for you. Tap the wheel and get ready to speak your answers!</p>
+        <button id="spinBtn">Spin the Wheel</button>
+      </div>`;
     const canvas = document.getElementById('wheelCanvas');
     const ctx    = canvas.getContext('2d');
-    const R=140, seg=10;
+    const R=160, seg=10;
     for(let i=0;i<seg;i++){
       const a=(i/seg)*2*Math.PI;
       ctx.beginPath();
-      ctx.moveTo(150,150);
-      ctx.arc(150,150,R, a, a+2*Math.PI/seg);
+      ctx.moveTo(180,180);
+      ctx.arc(180,180,R, a, a+2*Math.PI/seg);
       ctx.fillStyle=`hsl(${i*36},70%,60%)`;
       ctx.fill(); ctx.stroke();
       ctx.save();
-      ctx.translate(150,150);
+      ctx.translate(180,180);
       ctx.rotate(a+Math.PI/seg);
       ctx.fillStyle='#000';
-      ctx.fillText(i+1, R*0.6,0);
+      ctx.font = 'bold 26px sans-serif';
+      ctx.fillText(i+1, R*0.6,8);
       ctx.restore();
     }
     ctx.fillStyle='red';
     ctx.beginPath();
-    ctx.moveTo(150,10); ctx.lineTo(140,40); ctx.lineTo(160,40);
+    ctx.moveTo(180,16); ctx.lineTo(166,50); ctx.lineTo(194,50);
     ctx.fill();
 
     const btn = document.getElementById('spinBtn');
@@ -194,6 +399,7 @@
         showOverlay(`
           <h2>🎉 Table of ${pick}! 🎉</h2>
           <p>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</p>
+          <p>We'll listen for your answers — no typing needed.</p>
           <button id="gotable">Go!</button>`);
         document.getElementById('gotable').onclick = () => {
           hideOverlay();
@@ -205,73 +411,73 @@
 
   // ADDITION PRACTICE
   function startAdditionPractice(){
+    stopListening();
     const n = state.currentTable;
     let step = 0, mistakes = 0;
     let startTime = null;
 
     main.innerHTML = `
-      <h2>Practice Adding ${n}</h2>
-      <p>Mistakes: <span id="mcount">0</span>/2</p>
-      <div id="addQ">0 + ${n} = </div>
-      <input id="addAns" class="answer" disabled />
-      <button id="addSubmit">Start</button>
+      <div class="card">
+        <h2>Practice Adding ${n}</h2>
+        <p class="subtitle">Say each answer out loud. We'll keep listening until it's correct.</p>
+        <p>Mistakes: <span id="mcount">0</span>/2</p>
+        <div class="question" id="addQ">0 + ${n} = ?</div>
+        <div class="voice-status" id="addStatus">Press start to begin listening.</div>
+        <button id="addSubmit">Start Listening</button>
+      </div>
     `;
 
-    const btn   = document.getElementById('addSubmit');
-    const input = document.getElementById('addAns');
-    const qEl   = document.getElementById('addQ');
-    const mE    = document.getElementById('mcount');
+    const btn      = document.getElementById('addSubmit');
+    const qEl      = document.getElementById('addQ');
+    const mE       = document.getElementById('mcount');
+    const statusEl = document.getElementById('addStatus');
 
-    setNumericInput(input);
-    attachEnterSubmit(input, btn);
+    const ask = () => {
+      const expected = (step+1) * n;
+      qEl.textContent = `${step*n} + ${n} = ?`;
+      statusEl.textContent = `Say "${expected}" to move on.`;
+      listenForNumber(expected, statusEl, () => {
+        step++;
+        if(step === 10){
+          const timeTaken = Math.round((Date.now() - startTime)/1000);
+          const points = Math.max(0, 50 - mistakes*5 - timeTaken);
+          state.score += points;
+          audioLevelUp.play();
+          updateHeader();
+          showOverlay(`
+            <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+            <p>Time: ${timeTaken}s | Errors: ${mistakes}</p>
+            <p>Points: ${points}</p>
+            <button id="contFill">Continue</button>`);
+          document.getElementById('contFill').onclick = () => {
+            hideOverlay();
+            startFillMode();
+          };
+          return;
+        }
+        statusEl.textContent = 'Great! Next one coming up...';
+        setTimeout(ask, 700);
+      }, (val) => {
+        mistakes++;
+        mE.textContent = mistakes;
+        if(mistakes > 2){
+          stopListening();
+          gameOver();
+        }
+      });
+    };
 
     btn.onclick = () => {
-      if(btn.textContent==='Start'){
-        btn.textContent = 'Submit';
-        input.disabled = false;
-        input.focus();
-        startTime = Date.now();
-      } else {
-        const ans = parseInt(input.value,10);
-        if(ans === (step+1)*n){
-          audioSuccess.play();
-          step++;
-          if(step === 10){
-            const timeTaken = Math.round((Date.now() - startTime)/1000);
-            const points = Math.max(0, 50 - mistakes*5 - timeTaken);
-            state.score += points;
-            audioLevelUp.play();
-            updateHeader();
-            showOverlay(`
-              <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-              <p>Time: ${timeTaken}s | Errors: ${mistakes}</p>
-              <p>Points: ${points}</p>
-              <button id="contFill">Continue</button>`);
-            document.getElementById('contFill').onclick = () => {
-              hideOverlay();
-              startFillMode();
-            };
-            return;
-          }
-          qEl.textContent = `${step*n} + ${n} = `;
-          input.value = '';
-          input.focus();
-        } else {
-          mistakes++;
-          audioFail.play();
-          mE.textContent = mistakes;
-          if(mistakes > 2){
-            return gameOver();
-          }
-          input.value = '';
-          input.focus();
-        }
-      }
+      if(!requireSpeechRecognition()) return;
+      btn.disabled = true;
+      startTime = Date.now();
+      ask();
     };
   }
 
   // FILL-IN (odd levels)
   function startFillMode(){
+    stopListening();
     const n = state.currentTable;
     const bmap={1:4,3:4,5:5,7:6,9:7};
     const blankCount = bmap[state.level]||4;
@@ -280,140 +486,98 @@
     const allowedMist = Math.floor(blankCount * 0.33);
     const all = Array.from({length:10},(_,i)=>i+1);
     const blanks = shuffle(all.slice()).slice(0,blankCount);
+    let idx = 0;
+    let mistakes = 0;
 
-    main.innerHTML = `<h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
-      <table>
-        <tr><th>Q</th><th>Answer</th></tr>
-        ${all.map(i=>`
-          <tr>
-            <td>${n} × ${i} =</td>
-            <td>${
-              blanks.includes(i)
-                ? `<input class="answer" id="ans${i}" disabled inputmode="numeric" pattern="[0-9]*" />`
-                : `<strong>${n*i}</strong>`
-            }</td>
-          </tr>`).join('')}
-      </table>
-      <button id="fillStartBtn">Start</button>`;
+    main.innerHTML = `<div class="card">
+      <h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
+      <p class="subtitle">We'll ask you only the missing answers. Speak them aloud.</p>
+      <p>Mistakes: <span id="fillMist">0</span>/${allowedMist}</p>
+      <div class="question" id="fillQuestion">Ready?</div>
+      <div class="voice-status" id="fillStatus">Press start to begin listening.</div>
+      <div class="table-preview">${all.map(i=>`<div>${n} × ${i} = ${blanks.includes(i)?'❓':'<strong>'+n*i+'</strong>'}</div>`).join('')}</div>
+      <button id="fillStartBtn">Start Listening</button>
+    </div>`;
 
-    const startBtn = document.getElementById('fillStartBtn');
-    startBtn.onclick = () => {
-      startBtn.remove();
-      blanks.forEach(j => {
-        const inp = document.getElementById(`ans${j}`);
-        inp.disabled = false;
-      });
-      document.getElementById(`ans${blanks[0]}`).focus();
-      startTime = Date.now();
-    };
+    const statusEl = document.getElementById('fillStatus');
+    const qEl = document.getElementById('fillQuestion');
+    const mEl = document.getElementById('fillMist');
 
-
-    // Validate on blur
-    blanks.forEach(i => {
-      const inp = document.getElementById(`ans${i}`);
-      setNumericInput(inp);
-      inp.addEventListener('keydown', (e) => {
-        if(e.key === 'Enter' && !inp.disabled){
-          e.preventDefault();
-          inp.blur();
-          const idx = blanks.indexOf(i);
-          for(let offset=1; offset<blanks.length; offset++){
-            const nextIdx = blanks[(idx+offset)%blanks.length];
-            const nextEl = document.getElementById(`ans${nextIdx}`);
-            if(nextEl && !nextEl.disabled && nextEl.value===''){
-              nextEl.focus();
-              break;
-            }
-          }
-        }
-      });
-      inp.addEventListener('blur', () => {
-        const val = parseInt(inp.value,10);
-        if(inp.value===''){
-          inp.style.backgroundColor = '';
+    const ask = () => {
+      const i = blanks[idx];
+      const expected = n * i;
+      qEl.textContent = `${n} × ${i} = ?`;
+      statusEl.textContent = `Say "${expected}"`;
+      listenForNumber(expected, statusEl, () => {
+        idx++;
+        if(idx >= blanks.length){
+          const timeTaken = Math.round((Date.now() - startTime)/1000);
+          const points = Math.max(0, blanks.length*10 - mistakes*5 - timeTaken);
+          state.score += points;
+          audioLevelUp.play();
+          updateHeader();
+          showOverlay(`
+            <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+            <p>Time: ${timeTaken}s | Errors: ${mistakes}/${allowedMist}</p>
+            <p>Points: ${points}</p>
+            <button id="nextlvl">Next Level</button>`);
+          document.getElementById('nextlvl').onclick = () => {
+            hideOverlay();
+            state.level++;
+            saveState();
+            nextStep();
+          };
           return;
         }
-        if(val === n*i) {
-          inp.style.backgroundColor = '#cfc'; // green
-          audioSuccess.play();
-        } else {
-          inp.style.backgroundColor = '#fdd'; // red
-          audioFail.play();
-        }
-        // Check if all blanks filled
-        const filled = blanks.every(j => document.getElementById(`ans${j}`).value !== '');
-        if(!filled) return;
-        // Count mistakes
-        let mistakes=0;
-        blanks.forEach(j => {
-          const v = parseInt(document.getElementById(`ans${j}`).value,10);
-          if(v !== n*j) mistakes++;
-        });
+        statusEl.textContent = 'Nice! Here comes the next blank...';
+        setTimeout(ask, 700);
+      }, () => {
+        mistakes++;
+        mEl.textContent = mistakes;
         if(mistakes > allowedMist){
-          return gameOver();
+          stopListening();
+          gameOver();
         }
-        // Success
-        const timeTaken = Math.round((Date.now() - startTime)/1000);
-        const points = Math.max(0, blanks.length*10 - mistakes*5 - timeTaken);
-        state.score += points;
-        audioLevelUp.play();
-        updateHeader();
-        showOverlay(`
-          <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-          <p>Time: ${timeTaken}s | Errors: ${mistakes}/${allowedMist}</p>
-          <p>Points: ${points}</p>
-          <button id="nextlvl">Next Level</button>`);
-        document.getElementById('nextlvl').onclick = () => {
-          hideOverlay();
-          state.level++;
-          saveState();
-          nextStep();
-        };
       });
-    });
+    };
+
+    document.getElementById('fillStartBtn').onclick = () => {
+      if(!requireSpeechRecognition()) return;
+      startTime = Date.now();
+      document.getElementById('fillStartBtn').disabled = true;
+      ask();
+    };
   }
 
   // QUIZ (even levels)
   function startQuiz(){
+    stopListening();
     const n = state.currentTable;
     let mistakes=0, qIdx=0;
     let startTime=null;
     const questions = shuffle(Array.from({length:10},(_,i)=>i+1));
 
     main.innerHTML = `
-      <h2>Table of ${n} — Quiz (max 2 mistakes)</h2>
-      <p>Mistakes: <span id="mcount">0</span>/2</p>
-      <div id="question">Press Start</div>
-      <input id="qans" class="answer" disabled />
-      <button id="submitQ">Start</button>
+      <div class="card">
+        <h2>Table of ${n} — Voice Quiz</h2>
+        <p class="subtitle">Say each answer. We'll listen until it's right.</p>
+        <p>Mistakes: <span id="mcount">0</span>/2</p>
+        <div id="question" class="question">Press start</div>
+        <div class="voice-status" id="quizStatus">Press start to begin listening.</div>
+        <button id="submitQ">Start Listening</button>
+      </div>
     `;
 
-    const btn   = document.getElementById('submitQ');
-    const input = document.getElementById('qans');
-    const mE    = document.getElementById('mcount');
+    const btn      = document.getElementById('submitQ');
+    const statusEl = document.getElementById('quizStatus');
+    const mE       = document.getElementById('mcount');
+    const qEl      = document.getElementById('question');
 
-    setNumericInput(input);
-    attachEnterSubmit(input, btn);
-
-    btn.onclick = () => {
-      if(btn.textContent==='Start'){
-        btn.textContent = 'Submit';
-        input.disabled = false;
-        input.focus();
-        startTime = Date.now();
-        showNext();
-      } else {
-        const ans = parseInt(input.value,10);
-        const corr= n * questions[qIdx];
-        if(ans===corr){
-          audioSuccess.play();
-        } else {
-          mistakes++; audioFail.play();
-        }
-        mE.textContent = mistakes;
-        if(mistakes>2){
-          return gameOver();
-        }
+    const ask = () => {
+      const expected = n * questions[qIdx];
+      qEl.textContent = `${n} × ${questions[qIdx]} = ?`;
+      statusEl.textContent = `Say "${expected}"`;
+      listenForNumber(expected, statusEl, () => {
         qIdx++;
         if(qIdx>=questions.length){
           const timeTaken = Math.round((Date.now() - startTime)/1000);
@@ -432,25 +596,34 @@
             saveState();
             nextStep();
           };
-        } else {
-          showNext();
+          return;
         }
-      }
+        statusEl.textContent = 'Correct! Next question coming...';
+        setTimeout(ask, 700);
+      }, () => {
+        mistakes++; audioFail.play();
+        mE.textContent = mistakes;
+        if(mistakes>2){
+          stopListening();
+          return gameOver();
+        }
+      });
     };
 
-    function showNext(){
-      document.getElementById('question').textContent =
-        `${n} × ${questions[qIdx]} = `;
-      input.value = '';
-      input.focus();
-    }
+    btn.onclick = () => {
+      if(!requireSpeechRecognition()) return;
+      btn.disabled = true;
+      startTime = Date.now();
+      ask();
+    };
   }
 
   // GAME OVER & WIN
   function gameOver(){
+    stopListening();
     audioCountdown.pause();
     audioFail.play();
-    main.innerHTML = `<h2>Game Over!</h2><p>Your Score: ${state.score}</p>`;
+    main.innerHTML = `<div class="card"><h2>Game Over!</h2><p>Your Score: ${state.score}</p></div>`;
     setTimeout(()=>{
       const input = prompt('Enter your initials:','');
       const init  = input ? input.toUpperCase() : '';
@@ -468,10 +641,11 @@
   }
 
   function winGame(){
+    stopListening();
     audioCountdown.pause();
     audioSuccess.play();
-    main.innerHTML = `<h2>🎉 You Won the Game! 🎉</h2>
-      <p>Final Score: ${state.score}</p>`;
+    main.innerHTML = `<div class="card"><h2>🎉 You Won the Game! 🎉</h2>
+      <p>Final Score: ${state.score}</p></div>`;
     setTimeout(()=>{
       const input = prompt('Enter your initials:','');
       const init  = input ? input.toUpperCase() : '';
