@@ -133,8 +133,6 @@
 <header>
   <div id="header-info">
     <span id="levelDisplay">Level: 1</span>
-    <span aria-hidden="true">|</span>
-    <span id="scoreDisplay">Score: 0</span>
   </div>
   <button id="highScoresBtn" class="secondary">Table Times</button>
 </header>
@@ -177,7 +175,7 @@
   let tableStartTime = null;
 
   // STATE
-  const state = { level:1, score:0, currentTable:null };
+  const state = { level:1, currentTable:null };
 
   function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
   function loadState(){
@@ -202,11 +200,9 @@
   const overlay       = document.getElementById('overlay');
   const overlayContent= document.getElementById('overlayContent');
   const levelDisplay  = document.getElementById('levelDisplay');
-  const scoreDisplay  = document.getElementById('scoreDisplay');
 
   function updateHeader(){
     levelDisplay.textContent = 'Level: ' + state.level;
-    scoreDisplay.textContent = 'Score: ' + state.score;
     saveState();
   }
 
@@ -345,7 +341,7 @@
       nextStep();
     } else {
       clearState();
-      state.level=1; state.score=0;
+      state.level=1; state.currentTable=null;
       saveState();
       nextStep();
     }
@@ -443,14 +439,10 @@
       listenForNumber(expected, statusEl, () => {
         step++;
         if(step === 10){
-          const timeTaken = Math.round((Date.now() - tableStartTime)/1000);
-          const points = Math.max(0, 50 - timeTaken);
-          state.score += points;
           audioLevelUp.play();
           updateHeader();
           showOverlay(`
             <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-            <p>Points: ${points}</p>
             <p>Let's fill in a few blanks for ${n}.</p>
             <button id="contFill">Continue</button>`);
           document.getElementById('contFill').onclick = () => {
@@ -503,14 +495,10 @@
       listenForNumber(expected, statusEl, () => {
         idx++;
         if(idx >= blanks.length){
-          const timeTaken = Math.round((Date.now() - tableStartTime)/1000);
-          const points = Math.max(0, blanks.length*10 - timeTaken);
-          state.score += points;
           audioLevelUp.play();
           updateHeader();
           showOverlay(`
             <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-            <p>Points: ${points}</p>
             <p>Get ready for a quick voice quiz on ${n}.</p>
             <button id="nextlvl">Continue</button>`);
           document.getElementById('nextlvl').onclick = () => {
@@ -563,8 +551,6 @@
         qIdx++;
         if(qIdx>=questions.length){
           const totalTime = Math.round((Date.now() - tableStartTime)/1000);
-          const points = Math.max(0, 100 - totalTime);
-          state.score += points;
           audioLevelUp.play();
           updateHeader();
           const input = prompt('Enter your initials to record your time:', '');
@@ -573,7 +559,6 @@
           showOverlay(`
             <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
             <p>Total Time: ${totalTime}s</p>
-            <p>Points this round: ${points}</p>
             <button id="nextlvl2">Next Level</button>`);
           document.getElementById('nextlvl2').onclick = () => {
             hideOverlay();
@@ -602,11 +587,11 @@
     audioCountdown.pause();
     audioSuccess.play();
     main.innerHTML = `<div class="card"><h2>🎉 You Won the Game! 🎉</h2>
-      <p>Final Score: ${state.score}</p></div>`;
+      <p>You finished all the tables!</p></div>`;
     setTimeout(()=>{
       showOverlay(`
         <h2>Congratulations!</h2>
-        <p>Score: ${state.score}</p>
+        <p>Great work mastering your tables.</p>
         <button id="replay2">Play Again</button>`);
       document.getElementById('replay2').onclick = () => {
         audioCountdown.currentTime = 0;
