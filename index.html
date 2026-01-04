@@ -100,6 +100,44 @@
     td, th { border: 1px solid #c6d2e2; padding: 10px 14px; text-align: center; }
     th { background: #f1f6fb; }
 
+    .table-picker {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+      gap: 10px;
+      margin: 14px 0 4px;
+    }
+
+    .table-choice {
+      background: #f1f6fb;
+      border: 2px solid #c6d2e2;
+      color: #0f1b2d;
+      border-radius: 12px;
+      font-weight: 800;
+      padding: 12px 0;
+      cursor: pointer;
+      transition: transform 0.08s ease, box-shadow 0.1s ease, border-color 0.2s ease;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+    }
+
+    .table-choice:hover { transform: translateY(-1px); border-color: var(--primary); box-shadow: 0 10px 16px rgba(0,0,0,0.15); }
+    .table-choice:active { transform: translateY(0); box-shadow: 0 6px 12px rgba(0,0,0,0.12); }
+
+    .heard-wrapper { margin: 6px 0 2px; }
+    .heard-label { font-size: 0.95em; color: #4b5f75; }
+    .heard-number {
+      min-height: clamp(3rem, 6vw, 4.4rem);
+      font-size: clamp(2.8rem, 6vw, 4.8rem);
+      font-weight: 900;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      opacity: 0;
+      transform: translateY(8px) scale(0.96);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    .heard-number.visible { opacity: 1; transform: translateY(0) scale(1); }
+    .heard-number.correct { color: #1e8449; }
+    .heard-number.incorrect { color: #c0392b; }
+
     .table-preview {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -151,7 +189,6 @@
 (() => {
   // AUDIO
   const audioSuccess   = new Audio('success.mp3');
-  const audioFail      = new Audio('fail.mp3');
   const audioCountdown = new Audio('countdown.mp3');
   const audioSpin      = new Audio('spin.mp3');
   const audioLevelUp   = new Audio('level-up.mp3');
@@ -304,10 +341,23 @@
     return NaN;
   }
 
-  function listenForNumber(expected, statusEl, onCorrect, onMismatch){
+  function listenForNumber(expected, statusEl, onCorrect, onMismatch, heardEl){
     if(!requireSpeechRecognition()) return;
     stopListening();
     keepListening = true;
+
+    let heardTimeout = null;
+
+    const showHeard = (val, isCorrect) => {
+      if(!heardEl) return;
+      heardEl.textContent = isNaN(val) ? '??' : val;
+      heardEl.classList.remove('correct','incorrect','visible');
+      heardEl.classList.add(isCorrect ? 'correct' : 'incorrect','visible');
+      clearTimeout(heardTimeout);
+      heardTimeout = setTimeout(()=>{
+        heardEl.classList.remove('visible');
+      }, 2000);
+    };
 
     const startRecognition = () => {
       if(!keepListening) return;
@@ -323,14 +373,15 @@
         const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ');
         const val = parseSpokenNumber(transcript);
         if(val === expected){
+          showHeard(val, true);
           keepListening = false;
           statusEl.innerHTML = `<span class="good">Heard "${transcript.trim()}" → ${val}. Correct!</span>`;
           audioSuccess.play();
           rec.stop();
           setTimeout(() => onCorrect(transcript.trim(), val), 600);
         } else {
+          showHeard(val, false);
           onMismatch && onMismatch(val, transcript.trim());
-          audioFail.play();
           statusEl.innerHTML = `<span class="bad">Heard "${transcript.trim()}"${isNaN(val)?'':` → ${val}`} — try again.</span>`;
         }
       };
@@ -353,14 +404,49 @@
   function startGame(){
     stopListening();
     loadState();
-    if(state.level>1 && confirm(`Continue at Level ${state.level}?`)){
+    const hasProgress = state.level>1 || state.currentTable;
+    if(hasProgress && confirm(`Continue at Level ${state.level}?`)){
       nextStep();
     } else {
       clearState();
       state.level=1; state.currentTable=null;
       saveState();
-      nextStep();
+      pickTable();
     }
+  }
+
+  function pickTable(){
+    stopListening();
+    main.innerHTML = `
+      <div class="card">
+        <h2>Choose a Times Table</h2>
+        <p class="subtitle">Start anywhere you like. You can still spin the wheel for surprises later!</p>
+        <div class="table-picker">${Array.from({length:10},(_,i)=>`<button class="table-choice" data-table="${i+1}">${i+1}</button>`).join('')}</div>
+        <div class="voice-status" id="pickStatus">Select a table to begin.</div>
+        <button id="randomTable" class="secondary">Spin the Wheel Instead</button>
+      </div>`;
+
+    document.querySelectorAll('.table-choice').forEach(btn=>{
+      btn.onclick = () => {
+        const val = parseInt(btn.dataset.table,10);
+        if(isNaN(val)) return;
+        state.currentTable = val;
+        state.level = 1;
+        tableStartTime = null;
+        saveState();
+        showOverlay(`
+          <h2>Table of ${val} Selected</h2>
+          <p>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</p>
+          <p>We'll listen for your answers — no typing needed.</p>
+          <button id="startPractice">Start Practicing</button>`);
+        document.getElementById('startPractice').onclick = () => {
+          hideOverlay();
+          startAdditionPractice();
+        };
+      };
+    });
+
+    document.getElementById('randomTable').onclick = spinWheel;
   }
 
   function nextStep(){
@@ -439,6 +525,7 @@
         <h2>Practice Adding ${n}</h2>
         <p class="subtitle">Say each answer out loud. We'll keep listening until it's correct.</p>
         <div class="question" id="addQ">0 + ${n} = ?</div>
+        <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="addHeard"></div></div>
         <div class="voice-status" id="addStatus">Press start to begin listening.</div>
         <button id="addSubmit">Start Listening</button>
       </div>
@@ -469,7 +556,7 @@
         }
         statusEl.textContent = 'Great! Next one coming up...';
         setTimeout(ask, 700);
-      }, () => {});
+      }, () => {}, document.getElementById('addHeard'));
     };
 
     btn.onclick = () => {
@@ -495,6 +582,7 @@
       <h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
       <p class="subtitle">We'll ask you only the missing answers. Speak them aloud.</p>
       <div class="question" id="fillQuestion">Ready?</div>
+      <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="fillHeard"></div></div>
       <div class="voice-status" id="fillStatus">Press start to begin listening.</div>
       <div class="table-preview">${all.map(i=>`<div>${n} × ${i} = ${blanks.includes(i)?'❓':'<strong>'+n*i+'</strong>'}</div>`).join('')}</div>
       <button id="fillStartBtn">Start Listening</button>
@@ -527,7 +615,7 @@
         }
         statusEl.textContent = 'Nice! Here comes the next blank...';
         setTimeout(ask, 700);
-      }, () => {});
+      }, () => {}, document.getElementById('fillHeard'));
     };
 
     document.getElementById('fillStartBtn').onclick = () => {
@@ -550,6 +638,7 @@
         <h2>Table of ${n} — Voice Quiz</h2>
         <p class="subtitle">Say each answer. We'll listen until it's right.</p>
         <div id="question" class="question">Press start</div>
+        <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="quizHeard"></div></div>
         <div class="voice-status" id="quizStatus">Press start to begin listening.</div>
         <button id="submitQ">Start Listening</button>
       </div>
@@ -586,7 +675,7 @@
         }
         statusEl.textContent = 'Correct! Next question coming...';
         setTimeout(ask, 700);
-      }, () => {});
+      }, () => {}, document.getElementById('quizHeard'));
     };
 
     btn.onclick = () => {
