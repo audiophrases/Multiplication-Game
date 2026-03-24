@@ -164,6 +164,38 @@
       box-shadow:0 10px 22px rgba(0,0,0,0.35);
     }
     #overlay.hidden { display:none; }
+
+    .answer-input {
+      font-size: 2rem;
+      padding: 12px;
+      border-radius: 12px;
+      border: 3px solid #c6d2e2;
+      width: 160px;
+      text-align: center;
+      margin: 16px auto;
+      display: block;
+      color: #0f1b2d;
+      font-weight: 800;
+    }
+    .answer-input:focus {
+      border-color: var(--primary);
+      outline: none;
+      box-shadow: 0 0 12px rgba(75, 156, 255, 0.4);
+    }
+    .answer-input::placeholder {
+      color: #cbd5e1;
+      font-weight: 400;
+    }
+    /* Hide arrows for number input */
+    .answer-input::-webkit-outer-spin-button,
+    .answer-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .answer-input[type=number] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
   </style>
 </head>
 <body>
@@ -341,10 +373,26 @@
     return NaN;
   }
 
-  function listenForNumber(expected, statusEl, onCorrect, onMismatch, heardEl){
+  function listenForNumber(expected, statusEl, onCorrect, onMismatch, heardEl, inputEl){
     if(!requireSpeechRecognition()) return;
     stopListening();
     keepListening = true;
+
+    if(inputEl){
+      inputEl.value = '';
+      inputEl.focus();
+      inputEl.oninput = () => {
+        if(parseInt(inputEl.value, 10) === expected){
+          inputEl.oninput = null;
+          const val = parseInt(inputEl.value, 10);
+          statusEl.innerHTML = `<span class="good">Typed ${val}. Correct!</span>`;
+          audioSuccess.play();
+          const oldKeep = keepListening;
+          stopListening();
+          if (oldKeep) setTimeout(() => onCorrect('typed', val), 600);
+        }
+      };
+    }
 
     let heardTimeout = null;
 
@@ -373,6 +421,7 @@
         const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ');
         const val = parseSpokenNumber(transcript);
         if(val === expected){
+          if(inputEl) inputEl.oninput = null;
           showHeard(val, true);
           keepListening = false;
           statusEl.innerHTML = `<span class="good">Heard "${transcript.trim()}" → ${val}. Correct!</span>`;
@@ -524,20 +573,22 @@
       <div class="card">
         <h2>Practice Adding ${n}</h2>
         <div class="question" id="addQ">0 + ${n} = ?</div>
+        <input type="number" id="answerInput" class="answer-input" placeholder="?">
         <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="addHeard"></div></div>
-        <div class="voice-status" id="addStatus">Press start to begin listening.</div>
-        <button id="addSubmit">Start Listening</button>
+        <div class="voice-status" id="addStatus">Press Start to begin.</div>
+        <button id="addSubmit">Start</button>
       </div>
     `;
 
     const btn      = document.getElementById('addSubmit');
     const qEl      = document.getElementById('addQ');
     const statusEl = document.getElementById('addStatus');
+    const inputEl  = document.getElementById('answerInput');
 
     const ask = () => {
       const expected = (step+1) * n;
       qEl.textContent = `${step*n} + ${n} = ?`;
-      statusEl.textContent = `Say "${expected}" to move on.`;
+      statusEl.textContent = `Say or type "${expected}" to move on.`;
       listenForNumber(expected, statusEl, () => {
         step++;
         if(step === 10){
@@ -555,7 +606,7 @@
         }
         statusEl.textContent = 'Great! Next one coming up...';
         setTimeout(ask, 700);
-      }, () => {}, document.getElementById('addHeard'));
+      }, () => {}, document.getElementById('addHeard'), inputEl);
     };
 
     btn.onclick = () => {
@@ -579,22 +630,24 @@
 
     main.innerHTML = `<div class="card">
       <h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
-      <p class="subtitle">We'll ask you only the missing answers. Speak them aloud.</p>
+      <p class="subtitle">Type or say the missing answers.</p>
       <div class="question" id="fillQuestion">Ready?</div>
+      <input type="number" id="answerInput" class="answer-input" placeholder="?">
       <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="fillHeard"></div></div>
-      <div class="voice-status" id="fillStatus">Press start to begin listening.</div>
+      <div class="voice-status" id="fillStatus">Press Start to begin.</div>
       <div class="table-preview">${all.map(i=>`<div>${n} × ${i} = ${blanks.includes(i)?'❓':'<strong>'+n*i+'</strong>'}</div>`).join('')}</div>
-      <button id="fillStartBtn">Start Listening</button>
+      <button id="fillStartBtn">Start</button>
     </div>`;
 
     const statusEl = document.getElementById('fillStatus');
     const qEl = document.getElementById('fillQuestion');
+    const inputEl = document.getElementById('answerInput');
 
     const ask = () => {
       const i = blanks[idx];
       const expected = n * i;
       qEl.textContent = `${n} × ${i} = ?`;
-      statusEl.textContent = `Say "${expected}"`;
+      statusEl.textContent = `Say or type "${expected}"`;
       listenForNumber(expected, statusEl, () => {
         idx++;
         if(idx >= blanks.length){
@@ -614,7 +667,7 @@
         }
         statusEl.textContent = 'Nice! Here comes the next blank...';
         setTimeout(ask, 700);
-      }, () => {}, document.getElementById('fillHeard'));
+      }, () => {}, document.getElementById('fillHeard'), inputEl);
     };
 
     document.getElementById('fillStartBtn').onclick = () => {
@@ -634,23 +687,25 @@
 
     main.innerHTML = `
       <div class="card">
-        <h2>Table of ${n} — Voice Quiz</h2>
-        <p class="subtitle">Say each answer. We'll listen until it's right.</p>
-        <div id="question" class="question">Press start</div>
+        <h2>Table of ${n} — Challenge Quiz</h2>
+        <p class="subtitle">Say or type each answer.</p>
+        <div id="question" class="question">Press Start</div>
+        <input type="number" id="answerInput" class="answer-input" placeholder="?">
         <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="quizHeard"></div></div>
-        <div class="voice-status" id="quizStatus">Press start to begin listening.</div>
-        <button id="submitQ">Start Listening</button>
+        <div class="voice-status" id="quizStatus">Press Start to begin.</div>
+        <button id="submitQ">Start</button>
       </div>
     `;
 
     const btn      = document.getElementById('submitQ');
     const statusEl = document.getElementById('quizStatus');
     const qEl      = document.getElementById('question');
+    const inputEl  = document.getElementById('answerInput');
 
     const ask = () => {
       const expected = n * questions[qIdx];
       qEl.textContent = `${n} × ${questions[qIdx]} = ?`;
-      statusEl.textContent = `Say "${expected}"`;
+      statusEl.textContent = `Say or type "${expected}"`;
       listenForNumber(expected, statusEl, () => {
         qIdx++;
         if(qIdx>=questions.length){
@@ -674,7 +729,7 @@
         }
         statusEl.textContent = 'Correct! Next question coming...';
         setTimeout(ask, 700);
-      }, () => {}, document.getElementById('quizHeard'));
+      }, () => {}, document.getElementById('quizHeard'), inputEl);
     };
 
     btn.onclick = () => {
