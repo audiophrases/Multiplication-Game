@@ -196,6 +196,115 @@
       -moz-appearance: textfield;
       appearance: textfield;
     }
+    .answer-input:disabled { background:#eef3f9; color:#7a8ea3; }
+
+    /* MODE PICKER */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin-top: 8px;
+    }
+
+    .mode-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      background: #f1f6fb;
+      color: #0f1b2d;
+      border: 2px solid #c6d2e2;
+      padding: 24px 18px;
+      text-align: center;
+      white-space: normal;
+    }
+
+    .mode-card:hover { border-color: var(--primary); }
+    .mode-icon { font-size: 2.6rem; line-height: 1; }
+    .mode-name { font-size: 1.15em; font-weight: 800; }
+    .mode-desc { font-size: 0.78em; font-weight: 500; color: #41586f; line-height: 1.45; }
+
+    /* LADDER MODE */
+    .ladder-layout {
+      display: flex;
+      gap: 28px;
+      align-items: stretch;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .ladder-rail {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 4px;
+      flex: 0 0 104px;
+      width: 104px;
+      padding: 12px 30px 12px 12px;
+      background: linear-gradient(180deg, #eaf2fb, #dae6f4);
+      border: 2px solid #c6d2e2;
+      border-radius: 14px;
+    }
+
+    .ladder-play { flex: 1 1 320px; min-width: 270px; }
+
+    .rung {
+      position: relative;
+      height: 13px;
+      border-radius: 4px;
+      background: #fff;
+      border-left: 5px solid #cbd8e7;
+      box-shadow: inset 0 0 0 1px #dae3ee;
+      transition: background 0.25s ease, transform 0.25s ease;
+    }
+
+    .rung.z1 { border-left-color: #3fa96a; }
+    .rung.z2 { border-left-color: #3d8fd6; }
+    .rung.z3 { border-left-color: #d59b1f; }
+    .rung.z4 { border-left-color: #e07a3c; }
+    .rung.z5 { border-left-color: #c0392b; }
+
+    .rung.done { background: #a9d0f7; }
+    .rung.current {
+      background: var(--secondary);
+      transform: scaleX(1.12);
+      box-shadow: 0 0 12px rgba(255, 204, 75, 0.85);
+    }
+
+    .rung .climber {
+      position: absolute;
+      right: -32px;
+      top: -9px;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .rung.best-mark::after {
+      content: '★';
+      position: absolute;
+      right: -20px;
+      top: -6px;
+      color: #e0a800;
+      font-size: 0.85rem;
+    }
+
+    .rung-badge { font-weight: 800; color: #1b3145; margin-bottom: 4px; }
+
+    .zone-tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.68em;
+      color: #fff;
+      margin-right: 8px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .zone-tag.z1 { background: #3fa96a; }
+    .zone-tag.z2 { background: #3d8fd6; }
+    .zone-tag.z3 { background: #d59b1f; }
+    .zone-tag.z4 { background: #e07a3c; }
+    .zone-tag.z5 { background: #c0392b; }
   </style>
 </head>
 <body>
@@ -224,6 +333,7 @@
   const audioCountdown = new Audio('countdown.mp3');
   const audioSpin      = new Audio('spin.mp3');
   const audioLevelUp   = new Audio('level-up.mp3');
+  const audioFail      = new Audio('fail.mp3');
 
   // SPEECH
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -244,7 +354,7 @@
   let tableStartTime = null;
 
   // STATE
-  const state = { level:1, currentTable:null };
+  const state = { level:1, currentTable:null, mode:null, rung:1, bestRung:1 };
 
   function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
   function loadState(){
@@ -271,7 +381,13 @@
   const levelDisplay  = document.getElementById('levelDisplay');
 
   function updateHeader(){
-    levelDisplay.textContent = 'Level: ' + state.level;
+    if(state.mode === 'ladder'){
+      levelDisplay.textContent = `Rung ${state.rung} of ${LADDER_RUNGS} — best ${state.bestRung}`;
+    } else if(state.mode === 'tables'){
+      levelDisplay.textContent = 'Level: ' + state.level;
+    } else {
+      levelDisplay.textContent = 'Multiplication Mania';
+    }
     saveState();
   }
 
@@ -292,14 +408,27 @@
     } else {
       hs.forEach(e=> html+=`<li>${e.initials} — Table ${e.table} in ${e.timeSeconds}s (${e.date})</li>`);
     }
-    html += `</ol><button id="closeHS">Close</button>`;
+    html += `</ol>`;
+
+    const tricky = trickiestFacts(5);
+    html += `<h2>Tricky For You</h2>`;
+    if(!tricky.length){
+      html += `<p>Nothing yet — these appear once you've missed a fact a couple of times.</p>`;
+    } else {
+      html += `<p>These are pushed higher up the ladder so you meet them more often.</p><ol>`;
+      tricky.forEach(t => html += `<li>${t.key.replace('x',' × ')} — missed ${t.misses} of ${t.attempts}</li>`);
+      html += `</ol>`;
+    }
+    html += `<button id="closeHS">Close</button>`;
     showOverlay(html);
     document.getElementById('closeHS').onclick = hideOverlay;
   };
 
   document.getElementById('resetBtn').onclick = () => {
-    if(confirm('Clear progress & recorded times?')){
-      clearState(); localStorage.removeItem(HS_KEY);
+    if(confirm('Clear progress, recorded times & what the ladder has learned about you?')){
+      clearState();
+      localStorage.removeItem(HS_KEY);
+      localStorage.removeItem('mulFactStats');
       location.reload();
     }
   };
@@ -453,11 +582,45 @@
   function startGame(){
     stopListening();
     loadState();
+    showModePicker();
+  }
+
+  function showModePicker(){
+    stopListening();
+    state.mode = null;
+    updateHeader();
+    main.innerHTML = `
+      <div class="card">
+        <h2>Choose your game</h2>
+        <p class="subtitle">Two ways to practise. Say your answer or type it — both work.</p>
+        <div class="mode-grid">
+          <button class="mode-card" id="modeTables">
+            <span class="mode-icon">🎡</span>
+            <span class="mode-name">Tables Adventure</span>
+            <span class="mode-desc">Pick or spin a single table, then work it from adding up to a timed quiz.</span>
+          </button>
+          <button class="mode-card" id="modeLadder">
+            <span class="mode-icon">🪜</span>
+            <span class="mode-name">Ladder Climb</span>
+            <span class="mode-desc">All tables mixed across ${LADDER_RUNGS} rungs of rising difficulty. Right answer climbs, wrong answer drops one — you're never out. Best so far: rung ${state.bestRung||1}.</span>
+          </button>
+        </div>
+      </div>`;
+
+    document.getElementById('modeTables').onclick = startTablesMode;
+    document.getElementById('modeLadder').onclick = () => {
+      if(state.rung > 1 && !confirm(`Continue your climb at rung ${state.rung}?`)) state.rung = 1;
+      startLadderMode();
+    };
+  }
+
+  function startTablesMode(){
+    stopListening();
+    state.mode = 'tables';
     const hasProgress = state.level>1 || state.currentTable;
     if(hasProgress && confirm(`Continue at Level ${state.level}?`)){
       nextStep();
     } else {
-      clearState();
       state.level=1; state.currentTable=null;
       saveState();
       pickTable();
@@ -704,9 +867,13 @@
 
     const ask = () => {
       const expected = n * questions[qIdx];
+      let missedThis = false;
       qEl.textContent = `${n} × ${questions[qIdx]} = ?`;
       statusEl.textContent = `Say or type "${expected}"`;
       listenForNumber(expected, statusEl, () => {
+        // One record per question: the quiz retries until correct, so "did they get
+        // it first time" is the signal, and it feeds the ladder's personal history.
+        recordAnswer(n, questions[qIdx], !missedThis);
         qIdx++;
         if(qIdx>=questions.length){
           const totalTime = Math.round((Date.now() - tableStartTime)/1000);
@@ -729,7 +896,7 @@
         }
         statusEl.textContent = 'Correct! Next question coming...';
         setTimeout(ask, 700);
-      }, () => {}, document.getElementById('quizHeard'), inputEl);
+      }, () => { missedThis = true; }, document.getElementById('quizHeard'), inputEl);
     };
 
     btn.onclick = () => {
@@ -738,6 +905,431 @@
       if(!tableStartTime) tableStartTime = Date.now();
       ask();
     };
+  }
+
+  // ================= DIFFICULTY MODEL =================
+  // How much work one operand is, independent of its partner.
+  const OPERAND_WEIGHT = {0:0, 1:0, 2:1, 3:3, 4:3.5, 5:1.5, 6:6, 7:7, 8:6.5, 9:4, 10:0.5};
+  const FACT_MIN = 0.02, FACT_MAX = 14.62;   // raw scores of 1x1 and 7x8
+
+  // Single-digit fact, normalised to 0-100.
+  function factScore(a, b){
+    if(!a || !b) return 0;
+    let d = OPERAND_WEIGHT[a] + OPERAND_WEIGHT[b] + 0.02 * a * b;
+    if(a === b) d *= 0.85;   // squares are chunked together, easier than their size predicts
+    return Math.max(0, Math.round(100 * (d - FACT_MIN) / (FACT_MAX - FACT_MIN)));
+  }
+
+  const digitsOf = n => String(n).split('').map(Number);
+
+  // Carries generated while multiplying a multi-digit number by one digit.
+  function partialCarries(multi, single){
+    let carry = 0, count = 0;
+    digitsOf(multi).reverse().forEach(d => {
+      carry = Math.floor((d * single + carry) / 10);
+      if(carry > 0) count++;
+    });
+    return count;
+  }
+
+  // Carries generated while adding the partial products together.
+  function sumCarries(nums){
+    const cols = nums.map(n => String(n).split('').reverse().map(Number));
+    const len = Math.max(...cols.map(c => c.length));
+    let carry = 0, count = 0;
+    for(let i = 0; i < len; i++){
+      carry = Math.floor((carry + cols.reduce((t, c) => t + (c[i] || 0), 0)) / 10);
+      if(carry > 0) count++;
+    }
+    return count;
+  }
+
+  // Multi-digit difficulty. Carry load matters far more than digit count.
+  // Scored in the order you'd write it out — longer number on top — so that
+  // 47 x 3 and 3 x 47 are worth the same, and orientation is purely cosmetic.
+  function multiScore(a0, b0){
+    if(String(b0).length > String(a0).length || (String(b0).length === String(a0).length && b0 > a0)){
+      [a0, b0] = [b0, a0];
+    }
+    const strip = n => { let z = 0; while(n % 10 === 0 && n > 0){ n /= 10; z++; } return [n, z]; };
+    const [a, za] = strip(a0), [b, zb] = strip(b0);
+    const da = digitsOf(a), db = digitsOf(b);
+
+    let s = 22 * (da.length * db.length - 1);              // size of the digit-product grid
+    da.forEach(x => db.forEach(y => { s += factScore(x, y) / 6; }));  // hardness of each pair
+    db.forEach(y => { if(y) s += 7 * partialCarries(a, y); });        // carries within partials
+
+    const partials = db.map((y, i) => a * y * Math.pow(10, db.length - 1 - i)).filter(p => p !== 0);
+    if(partials.length > 1) s += 5 * sumCarries(partials);           // carries in the final sum
+
+    s += 4 * (za + zb);                                    // trailing zeros are a shift, not a product
+    s += 6 * Math.max(0, String(a0 * b0).length - 2);       // a big answer is more to hold and say
+    return Math.max(0, Math.round(s));
+  }
+
+  // Unified scale: single-digit facts occupy 0-100, everything wider floors at 100,
+  // so no two-digit question can appear before the whole times table is cleared.
+  function difficulty(a, b){
+    return (a <= 10 && b <= 10) ? factScore(a, b) : 100 + multiScore(a, b);
+  }
+
+  // ================= PERSONAL HISTORY =================
+  // The scores above are what's hard for children in general. This layer is what's
+  // hard for *this* child: a question they keep missing drifts up the ladder toward
+  // the rungs they actually spend their time on, and one they've mastered drifts down.
+  const MAX_SHIFT_UP   = 25;    // furthest a personal weakness can push a question up
+  const MAX_SHIFT_DOWN = 12;    // furthest a mastered question can drift down
+  const PRIOR_ATTEMPTS = 2;     // pseudo-attempts, so one slip doesn't swing the estimate
+  const PRIOR_MISS     = 0.25;  // miss rate assumed before we know anything
+
+  const storage = () => { try { return typeof localStorage === 'undefined' ? null : localStorage; } catch(_) { return null; } };
+
+  let stats = (() => {
+    try {
+      const store = storage();
+      const raw = store && JSON.parse(store.getItem('mulFactStats'));
+      if(raw && raw.facts && raw.shapes) return raw;
+    } catch(_) {}
+    return { facts:{}, shapes:{} };
+  })();
+
+  function saveStats(){
+    const store = storage();
+    if(store) try { store.setItem('mulFactStats', JSON.stringify(stats)); } catch(_) {}
+  }
+
+  // Single-digit facts are tracked one by one; wider questions are tracked by shape,
+  // because there are unboundedly many of them and missing 25 x 46 says nothing about 25 x 47.
+  function questionKey(a, b){
+    if(a <= 10 && b <= 10){
+      const [x, y] = a <= b ? [a, b] : [b, a];
+      return { bucket:'facts', key: x + 'x' + y };
+    }
+    const da = String(a).length, db = String(b).length;
+    const [x, y] = da <= db ? [da, db] : [db, da];
+    return { bucket:'shapes', key: x + 'd x ' + y + 'd' };
+  }
+
+  function recordAnswer(a, b, correct){
+    const { bucket, key } = questionKey(a, b);
+    const rec = stats[bucket][key] || (stats[bucket][key] = { n:0, w:0 });
+    rec.n++;
+    if(!correct) rec.w++;
+    saveStats();
+  }
+
+  // How far this player's own history moves a question on the difficulty scale.
+  function personalShift(a, b){
+    const { bucket, key } = questionKey(a, b);
+    const rec = stats[bucket][key];
+    if(!rec || !rec.n) return 0;
+    // Smoothed against a prior so the first miss doesn't declare a fact "hard".
+    const missRate = (rec.w + PRIOR_ATTEMPTS * PRIOR_MISS) / (rec.n + PRIOR_ATTEMPTS);
+    const delta = missRate - PRIOR_MISS;
+    return delta >= 0
+      ? Math.round(MAX_SHIFT_UP   * Math.min(1,  delta / (1 - PRIOR_MISS)))
+      : Math.round(MAX_SHIFT_DOWN * Math.max(-1, delta / PRIOR_MISS));
+  }
+
+  function personalDifficulty(a, b){
+    return difficulty(a, b) + personalShift(a, b);
+  }
+
+  function trickiestFacts(limit){
+    return Object.entries(stats.facts)
+      .filter(([, r]) => r.n >= 2 && r.w > 0)
+      .map(([key, r]) => ({ key, misses: r.w, attempts: r.n, rate: r.w / r.n }))
+      .sort((x, y) => y.rate - x.rate || y.misses - x.misses)
+      .slice(0, limit);
+  }
+
+  // ================= LADDER MODE =================
+  const LADDER_RUNGS = 30;
+
+  // Difficulty centre of each rung, interpolated between these anchors.
+  const RUNG_ANCHORS = [[1,2],[6,30],[12,58],[18,95],[21,120],[24,150],[27,195],[30,265]];
+
+  function rungCenter(r){
+    for(let i = 0; i < RUNG_ANCHORS.length - 1; i++){
+      const [r1, c1] = RUNG_ANCHORS[i], [r2, c2] = RUNG_ANCHORS[i+1];
+      if(r >= r1 && r <= r2) return c1 + (c2 - c1) * (r - r1) / (r2 - r1);
+    }
+    return RUNG_ANCHORS[RUNG_ANCHORS.length - 1][1];
+  }
+
+  // Window around the centre a question may be drawn from.
+  const rungHalfWidth = r => r <= 4 ? 14 : (r <= 18 ? 9 : 16);
+
+  // Which operand shapes a rung is allowed to serve, so big numbers can't arrive early.
+  function rungShapes(r){
+    if(r <= 18) return ['1x1'];
+    if(r <= 23) return ['1x1','1x2'];
+    if(r <= 27) return ['1x2','1x3','2x2'];
+    return ['2x2','1x3','2x3'];
+  }
+
+  const ZONES = [
+    { max:6,  name:'Ground', cls:'z1' },
+    { max:12, name:'Lower',  cls:'z2' },
+    { max:18, name:'Middle', cls:'z3' },
+    { max:23, name:'Upper',  cls:'z4' },
+    { max:30, name:'Summit', cls:'z5' }
+  ];
+  const zoneOf = r => ZONES.find(z => r <= z.max) || ZONES[ZONES.length - 1];
+
+  function eachPairOfShape(shape, visit){
+    switch(shape){
+      case '1x1': for(let a=1;a<=10;a++)   for(let b=a;b<=10;b++)  visit(a,b); break;
+      case '1x2': for(let a=11;a<=99;a++)  for(let b=2;b<=9;b++)   visit(a,b); break;
+      case '2x2': for(let a=11;a<=99;a++)  for(let b=a;b<=99;b++)  visit(a,b); break;
+      case '1x3': for(let a=101;a<=999;a+=2) for(let b=2;b<=9;b++) visit(a,b); break;
+      case '2x3': for(let a=101;a<=999;a+=7) for(let b=11;b<=99;b++) visit(a,b); break;
+    }
+  }
+
+  const rungWindow = r => [rungCenter(r) - rungHalfWidth(r), rungCenter(r) + rungHalfWidth(r)];
+
+  // Candidates for a rung, cached on base difficulty alone so the cache stays valid
+  // as the player's history changes. Widened by the most a personal shift can move a
+  // question, so pickQuestion has something to draw from in both directions.
+  const rungPools = new Map();
+  function rungPool(r){
+    if(rungPools.has(r)) return rungPools.get(r);
+    const [lo, hi] = rungWindow(r);
+    const min = lo - MAX_SHIFT_UP, max = hi + MAX_SHIFT_DOWN;
+    const pool = [];
+    rungShapes(r).forEach(shape => eachPairOfShape(shape, (a, b) => {
+      const d = difficulty(a, b);
+      // Base difficulty is cached alongside the pair: it never changes, and
+      // recomputing it for every candidate on every question is pure waste.
+      if(d >= min && d <= max) pool.push([a, b, d]);
+    }));
+    rungPools.set(r, pool);
+    return pool;
+  }
+
+  let recentQuestions = [];
+  function pickQuestion(r){
+    const candidates = rungPool(r);
+    if(!candidates.length) return [7, 8];
+    const [lo, hi] = rungWindow(r);
+
+    const within = adjust => candidates.filter(([a, b, d]) => {
+      const score = d + adjust(a, b);
+      return score >= lo && score <= hi;
+    });
+
+    // Personal difficulty first; fall back to the general model, then to anything
+    // in range, so a rung can never run out of questions.
+    let pool = within(personalShift);
+    if(!pool.length) pool = within(() => 0);
+    if(!pool.length) pool = candidates;
+
+    const fresh = pool.filter(p => !recentQuestions.includes(p[0] + 'x' + p[1]));
+    const src = fresh.length ? fresh : pool;
+    const [a, b] = src[Math.floor(Math.random() * src.length)];
+    recentQuestions.push(a + 'x' + b);
+    if(recentQuestions.length > 8) recentQuestions.shift();
+    return Math.random() < 0.5 ? [a, b] : [b, a];   // show both orientations
+  }
+
+  // One shot per rung: the first number given, spoken or typed, is the answer.
+  function askOnce(expected, statusEl, heardEl, inputEl, submitBtn, onVerdict){
+    stopListening();
+    let settled = false;
+
+    const settle = (value, source) => {
+      if(settled) return;
+      settled = true;
+      keepListening = false;
+      stopListening();
+      if(inputEl){ inputEl.onkeydown = null; inputEl.disabled = true; }
+      if(submitBtn){ submitBtn.onclick = null; submitBtn.disabled = true; }
+      const correct = value === expected;
+      if(heardEl){
+        heardEl.textContent = isNaN(value) ? '??' : value;
+        heardEl.classList.remove('correct','incorrect');
+        heardEl.classList.add(correct ? 'correct' : 'incorrect', 'visible');
+      }
+      onVerdict(correct, value, source);
+    };
+
+    const commitTyped = () => {
+      const v = parseInt(inputEl.value, 10);
+      if(!isNaN(v)) settle(v, 'typed');
+    };
+
+    if(inputEl){
+      inputEl.disabled = false;
+      inputEl.value = '';
+      inputEl.focus();
+      inputEl.onkeydown = e => { if(e.key === 'Enter') commitTyped(); };
+    }
+    if(submitBtn){
+      submitBtn.disabled = false;
+      submitBtn.onclick = commitTyped;
+    }
+
+    if(!SpeechRecognition){
+      statusEl.textContent = 'Type your answer, then press Enter.';
+      return;
+    }
+
+    keepListening = true;
+    const startRecognition = () => {
+      if(!keepListening || settled) return;
+      const rec = new SpeechRecognition();
+      activeRecognizer = rec;
+      rec.lang = 'en-US';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.continuous = false;
+
+      rec.onresult = e => {
+        const transcript = Array.from(e.results).map(r => r[0].transcript).join(' ');
+        const val = parseSpokenNumber(transcript);
+        // A mis-hear must never cost a rung — only a number we actually parsed counts as an answer.
+        if(isNaN(val)){
+          statusEl.innerHTML = `<span class="bad">Didn't catch a number — say it again.</span>`;
+          return;
+        }
+        settle(val, 'spoken');
+      };
+      rec.onerror = () => {};
+      rec.onend = () => { if(keepListening && !settled) setTimeout(startRecognition, 250); };
+
+      try { rec.start(); } catch(_) {}
+    };
+
+    statusEl.textContent = 'Say your answer or type it — first answer counts.';
+    startRecognition();
+  }
+
+  function ladderRailHtml(current){
+    let html = '';
+    for(let r = 1; r <= LADDER_RUNGS; r++){
+      const cls = ['rung', zoneOf(r).cls];
+      if(r < current) cls.push('done');
+      if(r === current) cls.push('current');
+      if(r === state.bestRung && state.bestRung > current) cls.push('best-mark');
+      html += `<div class="${cls.join(' ')}">${r === current ? '<span class="climber">🧗</span>' : ''}</div>`;
+    }
+    return html;
+  }
+
+  function startLadderMode(){
+    stopListening();
+    state.mode = 'ladder';
+    if(!state.rung || state.rung < 1) state.rung = 1;
+    if(!state.bestRung || state.bestRung < 1) state.bestRung = 1;
+    recentQuestions = [];
+    saveState();
+
+    main.innerHTML = `
+      <div class="card">
+        <h2>Ladder Climb</h2>
+        <p class="subtitle">Right answer climbs a rung. Wrong answer drops one. You can never be knocked out — only slowed down.</p>
+        <div class="ladder-layout">
+          <div class="ladder-rail" id="ladderRail"></div>
+          <div class="ladder-play">
+            <div class="rung-badge" id="rungBadge"></div>
+            <div class="question" id="ladderQ">Ready?</div>
+            <input type="number" id="answerInput" class="answer-input" placeholder="?">
+            <div class="heard-wrapper"><div class="heard-label">Your answer:</div><div class="heard-number" id="ladderHeard"></div></div>
+            <div class="voice-status" id="ladderStatus">Press Start to begin.</div>
+            <button id="ladderSubmit">Check</button>
+            <button id="ladderMenu" class="secondary">Menu</button>
+          </div>
+        </div>
+      </div>`;
+
+    const startZone = zoneOf(state.rung);
+    document.getElementById('ladderRail').innerHTML = ladderRailHtml(state.rung);
+    document.getElementById('rungBadge').innerHTML =
+      `<span class="zone-tag ${startZone.cls}">${startZone.name}</span>Rung ${state.rung} of ${LADDER_RUNGS}`;
+    document.getElementById('ladderMenu').onclick = () => { stopListening(); showModePicker(); };
+    updateHeader();
+
+    const startBtn = document.getElementById('ladderSubmit');
+    startBtn.textContent = 'Start';
+    startBtn.onclick = () => askLadderQuestion();
+    document.getElementById('answerInput').disabled = true;
+  }
+
+  function askLadderQuestion(){
+    const r = state.rung;
+    const [a, b] = pickQuestion(r);
+    const expected = a * b;
+    const zone = zoneOf(r);
+
+    const qEl      = document.getElementById('ladderQ');
+    const statusEl = document.getElementById('ladderStatus');
+    const heardEl  = document.getElementById('ladderHeard');
+    const inputEl  = document.getElementById('answerInput');
+    const submitEl = document.getElementById('ladderSubmit');
+
+    document.getElementById('ladderRail').innerHTML = ladderRailHtml(r);
+    document.getElementById('rungBadge').innerHTML =
+      `<span class="zone-tag ${zone.cls}">${zone.name}</span>Rung ${r} of ${LADDER_RUNGS}`;
+    qEl.textContent = `${a} × ${b} = ?`;
+    heardEl.classList.remove('visible','correct','incorrect');
+    submitEl.textContent = 'Check';
+    updateHeader();
+
+    askOnce(expected, statusEl, heardEl, inputEl, submitEl, correct => {
+      recordAnswer(a, b, correct);
+      if(correct){
+        audioSuccess.play();
+        if(r >= LADDER_RUNGS){
+          state.bestRung = LADDER_RUNGS;
+          saveState();
+          statusEl.innerHTML = `<span class="good">That's the top!</span>`;
+          setTimeout(ladderSummit, 900);
+          return;
+        }
+        state.rung = r + 1;
+        state.bestRung = Math.max(state.bestRung, state.rung);
+        saveState();
+        statusEl.innerHTML = `<span class="good">Correct — up to rung ${state.rung}!</span>`;
+        document.getElementById('ladderRail').innerHTML = ladderRailHtml(state.rung);
+        setTimeout(askLadderQuestion, 900);
+      } else {
+        audioFail.play();
+        state.rung = Math.max(1, r - 1);
+        saveState();
+        const where = r > 1 ? `Down to rung ${state.rung}.` : 'You stay on rung 1.';
+        statusEl.innerHTML = `<span class="bad">${a} × ${b} = ${expected}.</span> ${where}`;
+        document.getElementById('ladderRail').innerHTML = ladderRailHtml(state.rung);
+        setTimeout(askLadderQuestion, 2400);   // the fall is the teaching moment — let it land
+      }
+    });
+  }
+
+  function ladderSummit(){
+    stopListening();
+    audioLevelUp.play();
+    main.innerHTML = `<div class="card">
+      <h2>🏔️ You reached the top! 🏔️</h2>
+      <p>All ${LADDER_RUNGS} rungs climbed — from 1 × 1 all the way to two-digit multiplications.</p>
+    </div>`;
+    setTimeout(() => {
+      showOverlay(`
+        <h2>Summit!</h2>
+        <p>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</p>
+        <button id="climbAgain">Climb Again</button>
+        <button id="summitMenu" class="secondary">Menu</button>`);
+      document.getElementById('climbAgain').onclick = () => {
+        hideOverlay();
+        state.rung = 1;
+        startLadderMode();
+      };
+      document.getElementById('summitMenu').onclick = () => {
+        hideOverlay();
+        state.rung = 1;
+        saveState();
+        showModePicker();
+      };
+    }, 200);
   }
 
   // WIN
