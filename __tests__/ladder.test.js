@@ -11,7 +11,7 @@ function loadModel(){
   if(start === -1 || end === -1) throw new Error('difficulty model markers not found in index.html');
   const src = html.slice(start, end);
   return new Function(`${src}
-    return { factScore, multiScore, difficulty, rungCenter, rungHalfWidth, rungWindow,
+    return { FACT_ORDER, factScore, multiScore, difficulty, rungCenter, rungHalfWidth, rungWindow,
              rungShapes, rungPool, pickQuestion, zoneOf, LADDER_RUNGS,
              stats, recordAnswer, personalShift, personalDifficulty, trickiestFacts,
              MAX_SHIFT_UP, MAX_SHIFT_DOWN };`)();
@@ -28,6 +28,29 @@ const rungs = Array.from({length: M.LADDER_RUNGS}, (_, i) => i + 1);
 const singleDigitFacts = [];
 for(let a = 1; a <= 10; a++) for(let b = a; b <= 10; b++) singleDigitFacts.push([a, b]);
 
+describe('the authored fact order', () => {
+  const canon = ([a, b]) => (a <= b ? `${a}x${b}` : `${b}x${a}`);
+
+  test('covers all 55 unique facts exactly once', () => {
+    const listed = M.FACT_ORDER.map(canon).sort();
+    const expected = singleDigitFacts.map(canon).sort();
+    expect(listed).toHaveLength(55);
+    expect(new Set(listed).size).toBe(55);
+    expect(listed).toEqual(expected);
+  });
+
+  test('score rises with position and spans the full 0-100 range', () => {
+    const scores = M.FACT_ORDER.map(p => M.factScore(...p));
+    for(let i = 1; i < scores.length; i++) expect(scores[i]).toBeGreaterThan(scores[i - 1]);
+    expect(scores[0]).toBe(0);
+    expect(scores[scores.length - 1]).toBe(100);
+  });
+
+  test('orientation does not change a fact\'s score', () => {
+    M.FACT_ORDER.forEach(([a, b]) => expect(M.factScore(b, a)).toBe(M.factScore(a, b)));
+  });
+});
+
 describe('single-digit fact ordering', () => {
   test('7x8 is the hardest fact and 1x1 the easiest', () => {
     const sorted = singleDigitFacts.slice().sort((x, y) => M.factScore(...x) - M.factScore(...y));
@@ -37,20 +60,31 @@ describe('single-digit fact ordering', () => {
     expect(M.factScore(7, 8)).toBe(100);
   });
 
-  test('the top tier is the known hard core of the times table', () => {
+  test('the top tier is the hard core of the times table', () => {
     const hardest = singleDigitFacts
       .slice()
       .sort((x, y) => M.factScore(...y) - M.factScore(...x))
       .slice(0, 7)
       .map(([a, b]) => `${a}x${b}`)
       .sort();
-    expect(hardest).toEqual(['6x7', '6x8', '7x7', '7x8', '7x9', '8x8', '8x9']);
+    expect(hardest).toEqual(['4x8', '6x7', '6x8', '6x9', '7x8', '7x9', '8x9']);
   });
 
-  test('easy operands beat big products: 9x9 is easier than 7x8', () => {
+  test('size of the product does not decide difficulty', () => {
     expect(M.factScore(9, 9)).toBeLessThan(M.factScore(7, 8));
     expect(M.factScore(5, 10)).toBeLessThan(M.factScore(3, 4));
-    expect(M.factScore(6, 6)).toBeLessThan(M.factScore(6, 8));   // ties are chunked
+    expect(M.factScore(6, 6)).toBeLessThan(M.factScore(6, 8));   // squares are chunked
+    expect(M.factScore(8, 8)).toBeLessThan(M.factScore(4, 8));
+  });
+
+  test('the x1 and x10 tables are cleared before anything else', () => {
+    const blockTop = Math.max(...singleDigitFacts
+      .filter(([a, b]) => a === 1 || b === 1 || a === 10 || b === 10)
+      .map(p => M.factScore(...p)));
+    const restBottom = Math.min(...singleDigitFacts
+      .filter(([a, b]) => ![a, b].some(n => n === 1 || n === 10))
+      .map(p => M.factScore(...p)));
+    expect(blockTop).toBeLessThan(restBottom);
   });
 });
 
@@ -113,9 +147,16 @@ describe('ladder layout', () => {
     expect(M.difficulty(25, 46)).toBeGreaterThan(M.rungCenter(27));
   });
 
-  test('rung 18 serves the hard core', () => {
-    const names = M.rungPool(18).map(([a, b]) => `${a}x${b}`);
-    ['6x7', '6x8', '7x7', '7x8'].forEach(f => expect(names).toContain(f));
+  test('rung 18 serves the hard core and nothing softer', () => {
+    // What the rung actually asks, not what its widened candidate pool stocks.
+    const [lo, hi] = M.rungWindow(18);
+    const served = M.rungPool(18)
+      .filter(([a, b]) => M.difficulty(a, b) >= lo && M.difficulty(a, b) <= hi)
+      .map(([a, b]) => (a <= b ? `${a}x${b}` : `${b}x${a}`))
+      .sort();
+    ['6x7', '6x8', '7x8'].forEach(f => expect(served).toContain(f));
+    // Every one of them comes from the top tenth of the authored order.
+    served.forEach(f => expect(M.factScore(...f.split('x').map(Number))).toBeGreaterThan(85));
   });
 
   test('with no history, pickQuestion returns a question in the rung window', () => {

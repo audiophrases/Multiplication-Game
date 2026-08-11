@@ -19,9 +19,16 @@ This repository contains a small web-based game to practice multiplication table
 
 Questions are not random — each rung draws from a pool of questions scored by a difficulty model, so a rung is never the same question twice but is always the same hardness.
 
-Single-digit facts are scored 0–100 from a per-operand hardness weight (`1` and `10` are free, `2` and `5` are cheap, `6`/`7`/`8` are expensive), a small product-size term, and a discount for squares. This puts `7×8`, `6×7` and `6×8` at the top, matching the facts children actually find hardest.
+All 55 unique facts are listed in an explicit teaching order in `FACT_ORDER` in `index.html`, easiest first, and scored 0–100 by their position in that list. The order is authored rather than computed — **edit that list to change what the ladder asks, and everything downstream follows.**
 
-This puts the tables in the order children actually find them: `×5` easier than `×3` and `×4`, `×9` easier than `×7` and `×8`, and `7×8`, `6×7`, `6×8` hardest of all.
+The order it currently encodes:
+
+- The `×1` and `×10` tables are cleared as whole blocks before any other fact appears.
+- Squares are grouped early (`6×6`, `7×7`, `9×9` well before `3×9`), because they get memorised as their own set.
+- The `×9` facts sit high — the 10×−x trick is one more step, not one fewer.
+- `6×7`, `6×8` and `7×8` are hardest of all.
+
+Both orientations of a fact share one rank, and questions are shown either way round, so `2×5` and `5×2` are the same fact but not always the same prompt.
 
 Multi-digit questions are scored by carry load rather than digit count, and sit on a floor above every single-digit fact, so no two-digit question can appear before the times table is cleared. The ladder runs from `1×1` on the ground through `7×8` at rung 18 and up to work like `25×46` at the summit.
 
