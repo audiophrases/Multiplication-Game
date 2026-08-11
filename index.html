@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Multiplication Mania!</title>
   <style>
     :root {
@@ -149,6 +150,7 @@
 
     #overlay {
       position:fixed; top:0; left:0; width:100%; height:100%;
+      z-index: 300;   /* above the focus toggle, so dialogs are never overlapped */
       background:rgba(0,0,0,0.7);
       display:flex; align-items:center; justify-content:center;
       color:#fff; font-size:1.2rem;
@@ -237,9 +239,12 @@
       display: flex;
       flex-direction: column-reverse;
       gap: 4px;
-      flex: 0 0 104px;
-      width: 104px;
-      padding: 12px 30px 12px 12px;
+      flex: 0 0 108px;
+      width: 108px;
+      /* Sized to the viewport so all 30 rungs are always in view — the whole point
+         of the rail is seeing where you are, which fails the moment it scrolls. */
+      height: min(430px, 48vh);
+      padding: 10px 36px 10px 12px;
       background: linear-gradient(180deg, #eaf2fb, #dae6f4);
       border: 2px solid #c6d2e2;
       border-radius: 14px;
@@ -249,7 +254,8 @@
 
     .rung {
       position: relative;
-      height: 13px;
+      flex: 1 1 0;
+      min-height: 5px;
       border-radius: 4px;
       background: #fff;
       border-left: 5px solid #cbd8e7;
@@ -266,15 +272,17 @@
     .rung.done { background: #a9d0f7; }
     .rung.current {
       background: var(--secondary);
-      transform: scaleX(1.12);
+      /* Widened by margin, not transform: a transform would scale the climber too. */
+      margin-right: -7px;
       box-shadow: 0 0 12px rgba(255, 204, 75, 0.85);
     }
 
     .rung .climber {
       position: absolute;
       right: -32px;
-      top: -9px;
-      font-size: 1.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.45rem;
       line-height: 1;
     }
 
@@ -305,21 +313,75 @@
     .zone-tag.z3 { background: #d59b1f; }
     .zone-tag.z4 { background: #e07a3c; }
     .zone-tag.z5 { background: #c0392b; }
+
+    /* FOCUS MODE — strips everything that isn't the question being answered */
+    .focus-toggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 200;
+      margin: 0;
+      padding: 8px 13px;
+      font-size: 1.15rem;
+      line-height: 1;
+      border-radius: 10px;
+      background: rgba(15, 27, 45, 0.5);
+      color: #fff;
+      box-shadow: none;
+      opacity: 0.5;
+      transition: opacity 0.2s ease, background 0.2s ease;
+    }
+
+    .focus-toggle:hover {
+      opacity: 1;
+      background: rgba(15, 27, 45, 0.88);
+      transform: none;
+      box-shadow: none;
+    }
+
+    body.focus-mode header,
+    body.focus-mode footer,
+    body.focus-mode .subtitle,
+    body.focus-mode .heard-label { display: none; }
+
+    body.focus-mode main { padding: 10px; }
+
+    body.focus-mode .card {
+      max-width: 1100px;
+      padding: 14px clamp(14px, 3vw, 30px);
+      border-radius: 14px;
+    }
+
+    /* The heading still says which table you're on — demoted to a caption, not removed. */
+    body.focus-mode .card > h2 {
+      font-size: 0.8em;
+      font-weight: 700;
+      color: #51687e;
+      margin-bottom: 4px;
+    }
+
+    body.focus-mode .ladder-rail { height: min(620px, 76vh); }
+    body.focus-mode .question { font-size: clamp(2.6rem, 8vw, 5rem); margin: 10px 0 8px; }
+    body.focus-mode .answer-input { font-size: 2.6rem; width: 210px; margin: 12px auto; }
+    body.focus-mode .heard-number { font-size: clamp(3rem, 8vw, 5.6rem); }
+    body.focus-mode .rung-badge { font-size: 0.9em; }
   </style>
 </head>
 <body>
+
+<button id="focusBtn" class="focus-toggle" type="button" title="Fullscreen" aria-label="Enter fullscreen">⛶</button>
 
 <header>
   <div id="header-info">
     <span id="levelDisplay">Level: 1</span>
   </div>
-  <button id="highScoresBtn" class="secondary">Table Times</button>
+  <button id="highScoresBtn" class="secondary" type="button">Table Times</button>
 </header>
 
 <main id="main"></main>
 
 <footer>
-  <button id="resetBtn">Reset Progress</button>
+  <button id="resetBtn" type="button">Reset Progress</button>
 </footer>
 
 <div id="overlay" class="hidden">
@@ -1244,7 +1306,7 @@
     main.innerHTML = `
       <div class="card">
         <h2>Ladder Climb</h2>
-        <p class="subtitle">Right answer climbs a rung. Wrong answer drops one. You can never be knocked out — only slowed down.</p>
+        <p class="subtitle">Right climbs a rung, wrong drops one — you're never knocked out.</p>
         <div class="ladder-layout">
           <div class="ladder-rail" id="ladderRail"></div>
           <div class="ladder-play">
@@ -1376,6 +1438,60 @@
     }
     return a;
   }
+
+  // ================= FOCUS MODE =================
+  // Two separate things, driven by one button: the layout that hides everything
+  // but the question, and real browser fullscreen. The layout stands on its own
+  // where fullscreen isn't allowed — iOS Safari won't fullscreen a non-video element.
+  const focusBtn = document.getElementById('focusBtn');
+  const FOCUS_KEY = 'mulFocusMode';
+
+  const inBrowserFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+
+  function setFocusMode(on, remember){
+    document.body.classList.toggle('focus-mode', on);
+    focusBtn.textContent = on ? '✕' : '⛶';
+    focusBtn.title = on ? 'Exit fullscreen' : 'Fullscreen';
+    focusBtn.setAttribute('aria-label', focusBtn.title);
+    if(remember){
+      const store = storage();
+      if(store) try { store.setItem(FOCUS_KEY, on ? '1' : '0'); } catch(_) {}
+    }
+  }
+
+  function requestBrowserFullscreen(){
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if(!req) return;
+    // Prefixed implementations return undefined rather than a promise.
+    try { const p = req.call(el); if(p && p.catch) p.catch(() => {}); } catch(_) {}
+  }
+
+  function exitBrowserFullscreen(){
+    if(!inBrowserFullscreen()) return;
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if(!exit) return;
+    try { const p = exit.call(document); if(p && p.catch) p.catch(() => {}); } catch(_) {}
+  }
+
+  focusBtn.onclick = () => {
+    const goingIn = !document.body.classList.contains('focus-mode');
+    setFocusMode(goingIn, true);
+    if(goingIn) requestBrowserFullscreen(); else exitBrowserFullscreen();
+  };
+
+  // Esc leaves browser fullscreen without going through the button — keep them in step.
+  ['fullscreenchange','webkitfullscreenchange'].forEach(evt =>
+    document.addEventListener(evt, () => { if(!inBrowserFullscreen()) setFocusMode(false, true); }));
+
+  // The stripped-back layout is a preference worth keeping; fullscreen itself
+  // can't be restored without a fresh gesture, so only the layout comes back.
+  (() => {
+    const store = storage();
+    let saved = null;
+    if(store) try { saved = store.getItem(FOCUS_KEY); } catch(_) {}
+    setFocusMode(saved === '1', false);
+  })();
 
   // START
   startGame();
