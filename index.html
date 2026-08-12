@@ -314,30 +314,75 @@
     .zone-tag.z4 { background: #e07a3c; }
     .zone-tag.z5 { background: #c0392b; }
 
-    /* FOCUS MODE — strips everything that isn't the question being answered */
-    .focus-toggle {
+    /* Always-available controls — they stay put when focus mode hides the header */
+    .floating-controls {
       position: fixed;
       top: 10px;
       right: 10px;
       z-index: 200;
+      display: flex;
+      gap: 6px;
+    }
+
+    .floating-btn {
       margin: 0;
       padding: 8px 13px;
-      font-size: 1.15rem;
+      font-size: 1.05rem;
+      font-weight: 800;
       line-height: 1;
       border-radius: 10px;
       background: rgba(15, 27, 45, 0.5);
       color: #fff;
       box-shadow: none;
-      opacity: 0.5;
+      opacity: 0.55;
       transition: opacity 0.2s ease, background 0.2s ease;
     }
 
-    .focus-toggle:hover {
+    .floating-btn:hover {
       opacity: 1;
       background: rgba(15, 27, 45, 0.88);
       transform: none;
       box-shadow: none;
     }
+
+    /* ON-SCREEN KEYPAD */
+    .keypad {
+      position: fixed;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      z-index: 250;
+      width: min(340px, 100%);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 12px;
+      background: #112132;
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -8px 26px rgba(0, 0, 0, 0.32);
+    }
+
+    .keypad.hidden { display: none; }
+
+    /* Lift the page clear of the pad so it never covers the question or the box */
+    body.keypad-open main { padding-bottom: 290px; }
+
+    .keypad .key {
+      margin: 0;
+      padding: 12px 0;
+      font-size: 1.45rem;
+      font-weight: 800;
+      border-radius: 10px;
+      background: #24405c;
+      color: #fff;
+      box-shadow: none;
+    }
+
+    .keypad .key:hover { background: #2f5478; }
+    .keypad .key:hover,
+    .keypad .key:active { transform: none; box-shadow: none; }
+    .keypad .key-fn { background: #3b4457; font-size: 1.25rem; }
+    .keypad .key-send { background: #1e8449; font-size: 1.05rem; }
 
     body.focus-mode header,
     body.focus-mode footer,
@@ -369,7 +414,10 @@
 </head>
 <body>
 
-<button id="focusBtn" class="focus-toggle" type="button" title="Fullscreen" aria-label="Enter fullscreen">⛶</button>
+<div class="floating-controls">
+  <button id="langBtn" class="floating-btn" type="button" title="Voice language" aria-label="Voice language: English">🎤 EN</button>
+  <button id="focusBtn" class="floating-btn" type="button" title="Fullscreen" aria-label="Enter fullscreen">⛶</button>
+</div>
 
 <header>
   <div id="header-info">
@@ -388,6 +436,8 @@
   <div class="content" id="overlayContent"></div>
 </div>
 
+<div id="keypad" class="keypad hidden" role="group" aria-label="Number keypad"></div>
+
 <script>
 (() => {
   // AUDIO
@@ -397,10 +447,28 @@
   const audioLevelUp   = new Audio('level-up.mp3');
   const audioFail      = new Audio('fail.mp3');
 
+  // Restart from the top every time: replaying an Audio element that is still
+  // playing is a no-op, which silently swallows sounds during a fast streak.
+  function playSfx(audio){
+    try {
+      audio.currentTime = 0;
+      const p = audio.play();
+      if(p && p.catch) p.catch(() => {});
+    } catch(_) {}
+  }
+
   // SPEECH
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let activeRecognizer = null;
   let keepListening = false;
+  let voiceControl = null;   // pause/resume for the question currently being asked
+
+  const LANGUAGES = [
+    { code:'en-US', label:'EN', name:'English' },
+    { code:'ca-ES', label:'CA', name:'Català' }
+  ];
+  const LANG_KEY = 'mulSpeechLang';
+  let speechLang = 'en-US';
 
   // KEYS
   const GAME_KEY = 'mulGameState';
@@ -496,7 +564,9 @@
   };
 
   // SPEECH HELPERS
-  function stopListening(){
+  // Silences the microphone but leaves the question in flight, so the keypad can
+  // take over and hand control back.
+  function stopRecognizer(){
     keepListening = false;
     if(activeRecognizer){
       activeRecognizer.onresult = null;
@@ -507,6 +577,13 @@
     }
   }
 
+  // Ends the question too: any pending pause/resume handle is dropped, so a stale
+  // resume can never revive a recognizer for a screen that has moved on.
+  function stopListening(){
+    voiceControl = null;
+    stopRecognizer();
+  }
+
   function requireSpeechRecognition(){
     if(!SpeechRecognition){
       showOverlay(`<h2>Voice input unavailable</h2><p>Your browser needs speech recognition (try Chrome or Edge). Keyboard play isn't required, but you may need a supported browser.</p>`);
@@ -515,53 +592,63 @@
     return true;
   }
 
-  function parseSpokenNumber(text){
+  // Spoken number words per language. Homophones are folded in because speech
+  // recognition regularly returns "won" for one or "ate" for eight.
+  const NUMBER_WORDS = {
+    'en-US': {
+      zero:0, oh:0, o:0, owe:0,
+      one:1, won:1, two:2, too:2, to:2, three:3, four:4, for:4, fore:4, five:5,
+      six:6, seven:7, eight:8, ate:8, nine:9, ten:10,
+      eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16,
+      seventeen:17, eighteen:18, nineteen:19,
+      twenty:20, thirty:30, forty:40, fourty:40, fifty:50, sixty:60, seventy:70,
+      eighty:80, ninety:90,
+      hundred:100, hundreds:100, thousand:1000, thousands:1000
+    },
+    'ca-ES': {
+      zero:0,
+      u:1, un:1, una:1, dos:2, dues:2, tres:3, quatre:4, cinc:5, sis:6, set:7,
+      vuit:8, huit:8, nou:9, deu:10,
+      onze:11, dotze:12, tretze:13, catorze:14, quinze:15, setze:16,
+      disset:17, dèsset:17, divuit:18, devuit:18, dinou:19, dènou:19,
+      vint:20, trenta:30, quaranta:40, cinquanta:50, seixanta:60, setanta:70,
+      vuitanta:80, huitanta:80, noranta:90,
+      cent:100, cents:100, centes:100, mil:1000
+    }
+  };
+
+  // "i" joins tens to units in Catalan (vint-i-un); "and" does the same in English.
+  const NUMBER_JOINERS = new Set(['i', 'and', 'y']);
+
+  function parseSpokenNumber(text, lang){
     if(!text) return NaN;
     const cleaned = text.toLowerCase();
     const digitMatch = cleaned.match(/\d+/);
-    if(digitMatch) return parseInt(digitMatch[0],10);
+    if(digitMatch) return parseInt(digitMatch[0], 10);
 
-    const words = cleaned.replace(/[^a-z\s-]/g,' ').split(/\s+/).filter(Boolean);
-    const baseMap = {
-      zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9,
-      ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19,
-      twenty:20, thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90,
-      hundred:100
-    };
+    const map = NUMBER_WORDS[lang || speechLang] || NUMBER_WORDS['en-US'];
+    // Hyphens split like spaces so "vint-i-dos" and "twenty-two" both work.
+    const words = cleaned
+      .replace(/[^a-zàèéíòóúïüç\s-]/g, ' ')
+      .split(/[\s-]+/)
+      .filter(Boolean);
 
-    const map = { ...baseMap };
-    const homophones = {
-      zero: ['oh', 'o', 'owe'],
-      one: ['won'],
-      two: ['too', 'to'],
-      four: ['for', 'fore'],
-      eight: ['ate'],
-      forty: ['fourty']
-    };
-
-    Object.entries(homophones).forEach(([canonical, variants]) => {
-      const val = baseMap[canonical];
-      variants.forEach(v => map[v] = val);
-    });
-
-    let total = 0; let current = 0; let found = false;
+    let total = 0, current = 0, found = false;
     words.forEach(w => {
+      if(NUMBER_JOINERS.has(w)) return;
       const val = map[w];
       if(val === undefined) return;
       found = true;
-      if(val === 100){
-        current = Math.max(1, current) * val;
-      } else if(val >= 20){
-        current += val;
+      if(val === 1000){
+        total += Math.max(1, current) * 1000;   // "tres mil" / "three thousand"
+        current = 0;
+      } else if(val === 100){
+        current = Math.max(1, current) * 100;   // "dos-cents" / "two hundred"
       } else {
         current += val;
       }
     });
-    if(found){
-      total += current;
-      return total;
-    }
-    return NaN;
+    return found ? total + current : NaN;
   }
 
   function listenForNumber(expected, statusEl, onCorrect, onMismatch, heardEl, inputEl){
@@ -571,16 +658,17 @@
 
     if(inputEl){
       inputEl.value = '';
-      inputEl.focus();
+      // Not auto-focused: that would pop the keypad and mute the microphone before
+      // the player has chosen how to answer.
       inputEl.oninput = () => {
         if(parseInt(inputEl.value, 10) === expected){
           inputEl.oninput = null;
           const val = parseInt(inputEl.value, 10);
           statusEl.innerHTML = `<span class="good">Typed ${val}. Correct!</span>`;
-          audioSuccess.play();
-          const oldKeep = keepListening;
+          playSfx(audioSuccess);
+          hideKeypad();
           stopListening();
-          if (oldKeep) setTimeout(() => onCorrect('typed', val), 600);
+          setTimeout(() => onCorrect('typed', val), 600);
         }
       };
     }
@@ -603,7 +691,7 @@
       statusEl.textContent = 'Listening...';
       const rec = new SpeechRecognition();
       activeRecognizer = rec;
-      rec.lang = 'en-US';
+      rec.lang = speechLang;
       rec.interimResults = false;
       rec.maxAlternatives = 1;
       rec.continuous = false;
@@ -614,10 +702,9 @@
         if(val === expected){
           if(inputEl) inputEl.oninput = null;
           showHeard(val, true);
-          keepListening = false;
+          stopListening();
           statusEl.innerHTML = `<span class="good">Heard "${transcript.trim()}" → ${val}. Correct!</span>`;
-          audioSuccess.play();
-          rec.stop();
+          playSfx(audioSuccess);
           setTimeout(() => onCorrect(transcript.trim(), val), 600);
         } else {
           showHeard(val, false);
@@ -634,7 +721,13 @@
         if(keepListening) setTimeout(startRecognition, 250);
       };
 
-      rec.start();
+      try { rec.start(); } catch(_) {}
+    };
+
+    // Let the keypad silence the microphone while it is open, then hand back.
+    voiceControl = {
+      pause(){ stopRecognizer(); },
+      resume(){ if(!keepListening){ keepListening = true; startRecognition(); } }
     };
 
     startRecognition();
@@ -765,7 +858,7 @@
 
     const btn = document.getElementById('spinBtn');
     btn.onclick = () => {
-      audioSpin.play();
+      playSfx(audioSpin);
       btn.disabled = true;
       canvas.classList.add('spinning');
       setTimeout(()=>{
@@ -774,7 +867,7 @@
         state.currentTable = pick;
         tableStartTime = null;
         saveState();
-        audioLevelUp.play();
+        playSfx(audioLevelUp);
         showOverlay(`
           <h2>🎉 Table of ${pick}! 🎉</h2>
           <p>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</p>
@@ -817,7 +910,7 @@
       listenForNumber(expected, statusEl, () => {
         step++;
         if(step === 10){
-          audioLevelUp.play();
+          playSfx(audioLevelUp);
           updateHeader();
           showOverlay(`
             <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
@@ -876,7 +969,7 @@
       listenForNumber(expected, statusEl, () => {
         idx++;
         if(idx >= blanks.length){
-          audioLevelUp.play();
+          playSfx(audioLevelUp);
           updateHeader();
           showOverlay(`
             <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
@@ -939,7 +1032,7 @@
         qIdx++;
         if(qIdx>=questions.length){
           const totalTime = Math.round((Date.now() - tableStartTime)/1000);
-          audioLevelUp.play();
+          playSfx(audioLevelUp);
           updateHeader();
           const input = prompt('Enter your initials to record your time:', '');
           const init  = input ? input.toUpperCase().slice(0,3) : '';
@@ -1219,9 +1312,9 @@
     const settle = (value, source) => {
       if(settled) return;
       settled = true;
-      keepListening = false;
+      hideKeypad();
       stopListening();
-      if(inputEl){ inputEl.onkeydown = null; inputEl.disabled = true; }
+      if(inputEl){ inputEl.onkeydown = null; inputEl.disabled = true; inputEl.blur(); }
       if(submitBtn){ submitBtn.onclick = null; submitBtn.disabled = true; }
       const correct = value === expected;
       if(heardEl){
@@ -1240,8 +1333,10 @@
     if(inputEl){
       inputEl.disabled = false;
       inputEl.value = '';
-      inputEl.focus();
+      // Deliberately not focused: focusing opens the keypad, which would mute the
+      // microphone before the player has chosen how they want to answer.
       inputEl.onkeydown = e => { if(e.key === 'Enter') commitTyped(); };
+      inputEl._submit = commitTyped;
     }
     if(submitBtn){
       submitBtn.disabled = false;
@@ -1249,7 +1344,7 @@
     }
 
     if(!SpeechRecognition){
-      statusEl.textContent = 'Type your answer, then press Enter.';
+      statusEl.textContent = 'Tap the box and use the keypad.';
       return;
     }
 
@@ -1258,7 +1353,7 @@
       if(!keepListening || settled) return;
       const rec = new SpeechRecognition();
       activeRecognizer = rec;
-      rec.lang = 'en-US';
+      rec.lang = speechLang;
       rec.interimResults = false;
       rec.maxAlternatives = 1;
       rec.continuous = false;
@@ -1279,7 +1374,25 @@
       try { rec.start(); } catch(_) {}
     };
 
-    statusEl.textContent = 'Say your answer or type it — first answer counts.';
+    const listeningMessage = () => {
+      statusEl.textContent = 'Say your answer or tap the box to type — first answer counts.';
+    };
+
+    voiceControl = {
+      pause(){
+        if(settled) return;
+        stopRecognizer();
+        statusEl.textContent = 'Keypad open — tap Send when you\'re ready.';
+      },
+      resume(){
+        if(settled || keepListening) return;
+        keepListening = true;
+        listeningMessage();
+        startRecognition();
+      }
+    };
+
+    listeningMessage();
     startRecognition();
   }
 
@@ -1356,8 +1469,8 @@
 
     askOnce(expected, statusEl, heardEl, inputEl, submitEl, correct => {
       recordAnswer(a, b, correct);
+      const previousBest = state.bestRung;
       if(correct){
-        audioSuccess.play();
         if(r >= LADDER_RUNGS){
           state.bestRung = LADDER_RUNGS;
           saveState();
@@ -1368,11 +1481,18 @@
         state.rung = r + 1;
         state.bestRung = Math.max(state.bestRung, state.rung);
         saveState();
-        statusEl.innerHTML = `<span class="good">Correct — up to rung ${state.rung}!</span>`;
+        // Reaching a new zone or a new personal best is this mode's level-up, so it
+        // gets the level-up fanfare instead of the plain correct-answer chime.
+        const climbedZone = zoneOf(state.rung) !== zoneOf(r);
+        const newBest = state.rung > previousBest;
+        playSfx(climbedZone || newBest ? audioLevelUp : audioSuccess);
+        statusEl.innerHTML = climbedZone
+          ? `<span class="good">Correct — into the ${zoneOf(state.rung).name} zone!</span>`
+          : `<span class="good">Correct — up to rung ${state.rung}!</span>`;
         document.getElementById('ladderRail').innerHTML = ladderRailHtml(state.rung);
-        setTimeout(askLadderQuestion, 900);
+        setTimeout(askLadderQuestion, climbedZone ? 1200 : 900);
       } else {
-        audioFail.play();
+        playSfx(audioFail);
         state.rung = Math.max(1, r - 1);
         saveState();
         const where = r > 1 ? `Down to rung ${state.rung}.` : 'You stay on rung 1.';
@@ -1385,7 +1505,7 @@
 
   function ladderSummit(){
     stopListening();
-    audioLevelUp.play();
+    playSfx(audioLevelUp);
     main.innerHTML = `<div class="card">
       <h2>🏔️ You reached the top! 🏔️</h2>
       <p>All ${LADDER_RUNGS} rungs climbed — from 1 × 1 all the way to two-digit multiplications.</p>
@@ -1414,7 +1534,7 @@
   function winGame(){
     stopListening();
     audioCountdown.pause();
-    audioSuccess.play();
+    playSfx(audioSuccess);
     main.innerHTML = `<div class="card"><h2>🎉 You Won the Game! 🎉</h2>
       <p>You finished all the tables!</p></div>`;
     setTimeout(()=>{
@@ -1438,6 +1558,100 @@
     }
     return a;
   }
+
+  // ================= VOICE LANGUAGE =================
+  const langBtn = document.getElementById('langBtn');
+
+  function setSpeechLang(code, remember){
+    const lang = LANGUAGES.find(l => l.code === code) || LANGUAGES[0];
+    speechLang = lang.code;
+    langBtn.textContent = '🎤 ' + lang.label;
+    langBtn.setAttribute('aria-label', 'Voice language: ' + lang.name);
+    langBtn.title = 'Voice language: ' + lang.name + ' — tap to switch';
+    if(remember){
+      const store = storage();
+      if(store) try { store.setItem(LANG_KEY, lang.code); } catch(_) {}
+    }
+  }
+
+  langBtn.onclick = () => {
+    const next = LANGUAGES[(LANGUAGES.findIndex(l => l.code === speechLang) + 1) % LANGUAGES.length];
+    setSpeechLang(next.code, true);
+    // A recognizer already running is locked to the old language, so cycle it.
+    if(voiceControl && !keypadOpen()){ voiceControl.pause(); voiceControl.resume(); }
+  };
+
+  // ================= ON-SCREEN KEYPAD =================
+  // Opens when the answer box is tapped and mutes the microphone while it is up,
+  // so a child typing isn't also being listened to. Closing hands voice back.
+  const keypad = document.getElementById('keypad');
+  let activeInput = null;
+
+  keypad.innerHTML = ['1','2','3','4','5','6','7','8','9'].map(d =>
+      `<button type="button" class="key" data-key="${d}">${d}</button>`).join('')
+    + `<button type="button" class="key key-fn" data-key="back" aria-label="Delete last digit">⌫</button>`
+    + `<button type="button" class="key" data-key="0">0</button>`
+    + `<button type="button" class="key key-send" data-key="send">Send</button>`;
+
+  const keypadOpen = () => !keypad.classList.contains('hidden');
+
+  function showKeypad(input){
+    activeInput = input;
+    keypad.classList.remove('hidden');
+    document.body.classList.add('keypad-open');
+    // Scroll by exactly the overlap, not to centre: centring throws the whole page
+    // around, and usually the box is already clear of the pad.
+    const box = input.getBoundingClientRect();
+    const overlap = box.bottom + 16 - keypad.getBoundingClientRect().top;
+    if(overlap > 0) window.scrollBy(0, overlap);
+    if(voiceControl) voiceControl.pause();
+  }
+
+  function hideKeypad(){
+    if(!keypadOpen()) return;
+    keypad.classList.add('hidden');
+    document.body.classList.remove('keypad-open');
+    activeInput = null;
+    if(voiceControl) voiceControl.resume();
+  }
+
+  function pressKey(key){
+    if(!activeInput) return;
+    if(key === 'send'){
+      // Submit first. A valid answer settles the question, which closes the pad
+      // itself; an empty box leaves the pad up rather than dropping the player
+      // back into voice with nothing entered.
+      if(typeof activeInput._submit === 'function') activeInput._submit();
+      else hideKeypad();
+      return;
+    }
+    if(key === 'back') activeInput.value = activeInput.value.slice(0, -1);
+    else if(activeInput.value.length < 7) activeInput.value += key;
+    activeInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  // pointerdown rather than click, with the default suppressed: pressing a key must
+  // not blur the answer box, or the pad would close under the finger.
+  keypad.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const btn = e.target.closest('.key');
+    if(btn) pressKey(btn.dataset.key);
+  });
+
+  document.addEventListener('pointerdown', e => {
+    const input = e.target.closest('.answer-input');
+    if(input){
+      if(!input.disabled) showKeypad(input);
+    } else if(!e.target.closest('.keypad')){
+      hideKeypad();
+    }
+  });
+
+  // Keyboard users get the pad too, without it stealing focus from anything else.
+  document.addEventListener('focusin', e => {
+    const input = e.target.closest && e.target.closest('.answer-input');
+    if(input && !input.disabled) showKeypad(input);
+  });
 
   // ================= FOCUS MODE =================
   // Two separate things, driven by one button: the layout that hides everything
@@ -1488,9 +1702,13 @@
   // can't be restored without a fresh gesture, so only the layout comes back.
   (() => {
     const store = storage();
-    let saved = null;
-    if(store) try { saved = store.getItem(FOCUS_KEY); } catch(_) {}
-    setFocusMode(saved === '1', false);
+    let savedFocus = null, savedLang = null;
+    if(store) try {
+      savedFocus = store.getItem(FOCUS_KEY);
+      savedLang  = store.getItem(LANG_KEY);
+    } catch(_) {}
+    setFocusMode(savedFocus === '1', false);
+    setSpeechLang(savedLang || 'en-US', false);
   })();
 
   // START
