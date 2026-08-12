@@ -470,6 +470,18 @@
   const LANG_KEY = 'mulSpeechLang';
   let speechLang = 'en-US';
 
+  // How the player answered last time, so the next question opens the same way
+  // instead of making them reach for the keypad again on every single question.
+  const INPUT_KEY = 'mulInputMode';
+  let preferredInput = 'voice';   // 'voice' | 'keypad'
+
+  function setPreferredInput(mode){
+    if(mode !== 'voice' && mode !== 'keypad') return;
+    preferredInput = mode;
+    const store = storage();
+    if(store) try { store.setItem(INPUT_KEY, mode); } catch(_) {}
+  }
+
   // KEYS
   const GAME_KEY = 'mulGameState';
   const HS_KEY   = 'mulTableTimes';
@@ -666,10 +678,21 @@
           const val = parseInt(inputEl.value, 10);
           statusEl.innerHTML = `<span class="good">Typed ${val}. Correct!</span>`;
           playSfx(audioSuccess);
+          setPreferredInput('keypad');
           hideKeypad();
           stopListening();
           setTimeout(() => onCorrect('typed', val), 600);
         }
+      };
+      // This mode checks on every keystroke, so Send only needs to answer for a
+      // number that isn't right yet — otherwise the key would feel dead.
+      inputEl._submit = () => {
+        const val = parseInt(inputEl.value, 10);
+        if(isNaN(val) || val === expected) return;
+        showHeard(val, false);
+        onMismatch && onMismatch(val, String(val));
+        statusEl.innerHTML = `<span class="bad">${val} — try again.</span>`;
+        inputEl.value = '';
       };
     }
 
@@ -702,6 +725,7 @@
         if(val === expected){
           if(inputEl) inputEl.oninput = null;
           showHeard(val, true);
+          setPreferredInput('voice');
           stopListening();
           statusEl.innerHTML = `<span class="good">Heard "${transcript.trim()}" → ${val}. Correct!</span>`;
           playSfx(audioSuccess);
@@ -730,7 +754,11 @@
       resume(){ if(!keepListening){ keepListening = true; startRecognition(); } }
     };
 
-    startRecognition();
+    if(preferredInput === 'keypad' && inputEl){
+      showKeypad(inputEl);   // carry the last question's choice into this one
+    } else {
+      startRecognition();
+    }
   }
 
   // FLOW
@@ -1312,6 +1340,7 @@
     const settle = (value, source) => {
       if(settled) return;
       settled = true;
+      setPreferredInput(source === 'spoken' ? 'voice' : 'keypad');
       hideKeypad();
       stopListening();
       if(inputEl){ inputEl.onkeydown = null; inputEl.disabled = true; inputEl.blur(); }
@@ -1344,7 +1373,8 @@
     }
 
     if(!SpeechRecognition){
-      statusEl.textContent = 'Tap the box and use the keypad.';
+      statusEl.textContent = 'Tap the keys, then Send.';
+      if(inputEl) showKeypad(inputEl);   // the only way in, so don't make them ask
       return;
     }
 
@@ -1392,8 +1422,14 @@
       }
     };
 
-    listeningMessage();
-    startRecognition();
+    // Open the way they answered last time. Tapping away from the keypad puts them
+    // back on voice, so the choice is never a one-way door.
+    if(preferredInput === 'keypad' && inputEl){
+      showKeypad(inputEl);   // pauses voice before it ever starts
+    } else {
+      listeningMessage();
+      startRecognition();
+    }
   }
 
   function ladderRailHtml(current){
@@ -1607,11 +1643,14 @@
     if(voiceControl) voiceControl.pause();
   }
 
-  function hideKeypad(){
+  // byUser means the player dismissed it themselves, which is them choosing voice
+  // for the next question. Closing it because the answer landed says nothing.
+  function hideKeypad(byUser){
     if(!keypadOpen()) return;
     keypad.classList.add('hidden');
     document.body.classList.remove('keypad-open');
     activeInput = null;
+    if(byUser) setPreferredInput('voice');
     if(voiceControl) voiceControl.resume();
   }
 
@@ -1643,7 +1682,7 @@
     if(input){
       if(!input.disabled) showKeypad(input);
     } else if(!e.target.closest('.keypad')){
-      hideKeypad();
+      hideKeypad(true);
     }
   });
 
@@ -1702,13 +1741,15 @@
   // can't be restored without a fresh gesture, so only the layout comes back.
   (() => {
     const store = storage();
-    let savedFocus = null, savedLang = null;
+    let savedFocus = null, savedLang = null, savedInput = null;
     if(store) try {
       savedFocus = store.getItem(FOCUS_KEY);
       savedLang  = store.getItem(LANG_KEY);
+      savedInput = store.getItem(INPUT_KEY);
     } catch(_) {}
     setFocusMode(savedFocus === '1', false);
     setSpeechLang(savedLang || 'en-US', false);
+    if(savedInput === 'keypad' || savedInput === 'voice') preferredInput = savedInput;
   })();
 
   // START

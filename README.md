@@ -16,6 +16,7 @@ This repository contains a small web-based game to practice multiplication table
    - **🎤 EN / CA** (top right) switches speech recognition between English and Catalan. Both languages understand spoken number words as well as digits, including Catalan compounds like `vint-i-un` and `dos-cents cinquanta`.
    - **⛶** (top right) is fullscreen focus mode: it strips away the header, footer and other chrome so only the question remains. Where the browser refuses true fullscreen (iOS Safari), the stripped-back layout still applies.
    - Tapping the answer box opens an on-screen keypad with a **Send** button, and mutes the microphone while it is open so a child typing isn't also being listened to. Tapping away closes it and voice resumes.
+   - Whichever way you answered last is how the next question opens. Answer by keypad and the keypad is already up for the next one; answer by voice, or tap away from the keypad, and it goes back to listening. The choice is remembered between sessions.
 
 4. Your current level, ladder rung, best climb and fastest table times are saved in `localStorage`, so progress persists between sessions.
 
