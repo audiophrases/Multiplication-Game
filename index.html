@@ -384,6 +384,23 @@
     .keypad .key-fn { background: #3b4457; font-size: 1.25rem; }
     .keypad .key-send { background: #1e8449; font-size: 1.05rem; }
 
+    .keypad .key-reverse {
+      grid-column: 1 / -1;
+      padding: 10px 0;
+      font-size: 0.82rem;
+      background: #3b4457;
+      letter-spacing: 0.3px;
+    }
+
+    .keypad .key-reverse.on { background: var(--secondary); color: #1e2e3a; }
+    .keypad .key-reverse.on:hover { background: #ffd76b; }
+
+    /* While units-first is on, the box fills from the right — say so */
+    .answer-input.units-first {
+      border-color: #e0a800;
+      box-shadow: 0 0 12px rgba(224, 168, 0, 0.35);
+    }
+
     body.focus-mode header,
     body.focus-mode footer,
     body.focus-mode .subtitle,
@@ -1623,7 +1640,45 @@
   const keypad = document.getElementById('keypad');
   let activeInput = null;
 
-  keypad.innerHTML = ['1','2','3','4','5','6','7','8','9'].map(d =>
+  // ===== KEYPAD DIGIT ORDER =====
+  // Long multiplication produces its answer right to left, so units-first mode lets
+  // 15678 be entered as 8, 7, 6, 5, 1 — each digit pushed onto the front.
+  const MAX_ANSWER_DIGITS = 7;
+
+  function applyDigit(value, digit, unitsFirstMode){
+    if(value.length >= MAX_ANSWER_DIGITS) return value;
+    return unitsFirstMode ? digit + value : value + digit;
+  }
+
+  // Backspace always undoes the digit entered most recently, which in units-first
+  // mode is the leftmost one — not the last character.
+  function applyBackspace(value, unitsFirstMode){
+    return unitsFirstMode ? value.slice(1) : value.slice(0, -1);
+  }
+  // ===== END KEYPAD DIGIT ORDER =====
+
+  const REVERSE_KEY = 'mulUnitsFirst';
+  let unitsFirst = false;
+
+  function setUnitsFirst(on, remember){
+    unitsFirst = !!on;
+    const btn = keypad.querySelector('.key-reverse');
+    if(btn){
+      btn.classList.toggle('on', unitsFirst);
+      btn.textContent = unitsFirst ? '⇠ Units first — ON' : '⇠ Units first — off';
+      btn.setAttribute('aria-pressed', unitsFirst ? 'true' : 'false');
+    }
+    document.querySelectorAll('.answer-input').forEach(el =>
+      el.classList.toggle('units-first', unitsFirst));
+    if(remember){
+      const store = storage();
+      if(store) try { store.setItem(REVERSE_KEY, unitsFirst ? '1' : '0'); } catch(_) {}
+    }
+  }
+
+  keypad.innerHTML =
+      `<button type="button" class="key key-reverse" data-key="reverse" aria-pressed="false">⇠ Units first — off</button>`
+    + ['1','2','3','4','5','6','7','8','9'].map(d =>
       `<button type="button" class="key" data-key="${d}">${d}</button>`).join('')
     + `<button type="button" class="key key-fn" data-key="back" aria-label="Delete last digit">⌫</button>`
     + `<button type="button" class="key" data-key="0">0</button>`
@@ -1633,6 +1688,7 @@
 
   function showKeypad(input){
     activeInput = input;
+    input.classList.toggle('units-first', unitsFirst);
     keypad.classList.remove('hidden');
     document.body.classList.add('keypad-open');
     // Scroll by exactly the overlap, not to centre: centring throws the whole page
@@ -1664,8 +1720,10 @@
       else hideKeypad();
       return;
     }
-    if(key === 'back') activeInput.value = activeInput.value.slice(0, -1);
-    else if(activeInput.value.length < 7) activeInput.value += key;
+    if(key === 'reverse'){ setUnitsFirst(!unitsFirst, true); return; }
+    activeInput.value = key === 'back'
+      ? applyBackspace(activeInput.value, unitsFirst)
+      : applyDigit(activeInput.value, key, unitsFirst);
     activeInput.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
@@ -1741,14 +1799,16 @@
   // can't be restored without a fresh gesture, so only the layout comes back.
   (() => {
     const store = storage();
-    let savedFocus = null, savedLang = null, savedInput = null;
+    let savedFocus = null, savedLang = null, savedInput = null, savedReverse = null;
     if(store) try {
-      savedFocus = store.getItem(FOCUS_KEY);
-      savedLang  = store.getItem(LANG_KEY);
-      savedInput = store.getItem(INPUT_KEY);
+      savedFocus   = store.getItem(FOCUS_KEY);
+      savedLang    = store.getItem(LANG_KEY);
+      savedInput   = store.getItem(INPUT_KEY);
+      savedReverse = store.getItem(REVERSE_KEY);
     } catch(_) {}
     setFocusMode(savedFocus === '1', false);
     setSpeechLang(savedLang || 'en-US', false);
+    setUnitsFirst(savedReverse === '1', false);
     if(savedInput === 'keypad' || savedInput === 'voice') preferredInput = savedInput;
   })();
 
