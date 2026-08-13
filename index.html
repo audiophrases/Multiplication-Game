@@ -478,7 +478,7 @@
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let activeRecognizer = null;
   let keepListening = false;
-  let voiceControl = null;   // pause/resume for the question currently being asked
+  let voiceControl = null;   // restart handle for the question currently being asked
 
   const LANGUAGES = [
     { code:'en-US', label:'EN', name:'English' },
@@ -601,7 +601,10 @@
       activeRecognizer.onresult = null;
       activeRecognizer.onerror = null;
       activeRecognizer.onend = null;
-      try { activeRecognizer.stop(); } catch(_) {}
+      // abort() rather than stop(): we never want the pending final result once we
+      // are tearing down, and it frees the microphone immediately instead of
+      // leaving a restart to race a session that is still winding down.
+      try { activeRecognizer.abort(); } catch(_) {}
       activeRecognizer = null;
     }
   }
@@ -714,6 +717,7 @@
     }
 
     let heardTimeout = null;
+    let startFailures = 0;
 
     const showHeard = (val, isCorrect) => {
       if(!heardEl) return;
@@ -762,20 +766,29 @@
         if(keepListening) setTimeout(startRecognition, 250);
       };
 
-      try { rec.start(); } catch(_) {}
+      try {
+        rec.start();
+        startFailures = 0;
+      } catch(_) {
+        // See askOnce: a failed start fires no onend, so it must retry itself.
+        activeRecognizer = null;
+        if(++startFailures <= 8) setTimeout(startRecognition, 300);
+        else statusEl.innerHTML = `<span class="bad">Microphone busy — use the keypad.</span>`;
+      }
     };
 
-    // Let the keypad silence the microphone while it is open, then hand back.
     voiceControl = {
-      pause(){ stopRecognizer(); },
-      resume(){ if(!keepListening){ keepListening = true; startRecognition(); } }
+      restart(){
+        stopRecognizer();
+        keepListening = true;
+        startFailures = 0;
+        setTimeout(startRecognition, 120);
+      }
     };
 
-    if(preferredInput === 'keypad' && inputEl){
-      showKeypad(inputEl);   // carry the last question's choice into this one
-    } else {
-      startRecognition();
-    }
+    startRecognition();
+    // Carry the last question's choice into this one; voice stays live regardless.
+    if(preferredInput === 'keypad' && inputEl) showKeypad(inputEl);
   }
 
   // FLOW
@@ -936,7 +949,7 @@
       <div class="card">
         <h2>Practice Adding ${n}</h2>
         <div class="question" id="addQ">0 + ${n} = ?</div>
-        <input type="number" id="answerInput" class="answer-input" placeholder="?">
+        <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
         <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="addHeard"></div></div>
         <div class="voice-status" id="addStatus">Press Start to begin.</div>
         <button id="addSubmit">Start</button>
@@ -995,7 +1008,7 @@
       <h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
       <p class="subtitle">Type or say the missing answers.</p>
       <div class="question" id="fillQuestion">Ready?</div>
-      <input type="number" id="answerInput" class="answer-input" placeholder="?">
+      <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
       <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="fillHeard"></div></div>
       <div class="voice-status" id="fillStatus">Press Start to begin.</div>
       <div class="table-preview">${all.map(i=>`<div>${n} × ${i} = ${blanks.includes(i)?'❓':'<strong>'+n*i+'</strong>'}</div>`).join('')}</div>
@@ -1053,7 +1066,7 @@
         <h2>Table of ${n} — Challenge Quiz</h2>
         <p class="subtitle">Say or type each answer.</p>
         <div id="question" class="question">Press Start</div>
-        <input type="number" id="answerInput" class="answer-input" placeholder="?">
+        <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
         <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="quizHeard"></div></div>
         <div class="voice-status" id="quizStatus">Press Start to begin.</div>
         <button id="submitQ">Start</button>
@@ -1396,6 +1409,7 @@
     }
 
     keepListening = true;
+    let startFailures = 0;
     const startRecognition = () => {
       if(!keepListening || settled) return;
       const rec = new SpeechRecognition();
@@ -1418,35 +1432,37 @@
       rec.onerror = () => {};
       rec.onend = () => { if(keepListening && !settled) setTimeout(startRecognition, 250); };
 
-      try { rec.start(); } catch(_) {}
-    };
-
-    const listeningMessage = () => {
-      statusEl.textContent = 'Say your answer or tap the box to type — first answer counts.';
-    };
-
-    voiceControl = {
-      pause(){
-        if(settled) return;
-        stopRecognizer();
-        statusEl.textContent = 'Keypad open — tap Send when you\'re ready.';
-      },
-      resume(){
-        if(settled || keepListening) return;
-        keepListening = true;
-        listeningMessage();
-        startRecognition();
+      try {
+        rec.start();
+        startFailures = 0;
+      } catch(_) {
+        // start() throws while a previous session is still releasing the microphone.
+        // onend never fires for a start that failed, so without this retry the mic
+        // stays dead for the rest of the question.
+        activeRecognizer = null;
+        if(++startFailures <= 8) setTimeout(startRecognition, 300);
+        else statusEl.innerHTML = `<span class="bad">Microphone busy — use the keypad.</span>`;
       }
     };
 
-    // Open the way they answered last time. Tapping away from the keypad puts them
-    // back on voice, so the choice is never a one-way door.
-    if(preferredInput === 'keypad' && inputEl){
-      showKeypad(inputEl);   // pauses voice before it ever starts
-    } else {
-      listeningMessage();
-      startRecognition();
-    }
+    voiceControl = {
+      // Only the language switch needs this: a running recognizer is locked to the
+      // language it started with. The keypad no longer stops the microphone.
+      restart(){
+        if(settled) return;
+        stopRecognizer();
+        keepListening = true;
+        startFailures = 0;
+        setTimeout(startRecognition, 120);
+      }
+    };
+
+    statusEl.textContent = 'Say your answer, or use the keypad — first answer counts.';
+    startRecognition();
+
+    // Open the keypad the way they answered last time. Voice keeps running
+    // underneath, so either route stays live and neither can wedge the other.
+    if(preferredInput === 'keypad' && inputEl) showKeypad(inputEl);
   }
 
   function ladderRailHtml(current){
@@ -1478,7 +1494,7 @@
           <div class="ladder-play">
             <div class="rung-badge" id="rungBadge"></div>
             <div class="question" id="ladderQ">Ready?</div>
-            <input type="number" id="answerInput" class="answer-input" placeholder="?">
+            <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
             <div class="heard-wrapper"><div class="heard-label">Your answer:</div><div class="heard-number" id="ladderHeard"></div></div>
             <div class="voice-status" id="ladderStatus">Press Start to begin.</div>
             <button id="ladderSubmit">Check</button>
@@ -1631,7 +1647,7 @@
     const next = LANGUAGES[(LANGUAGES.findIndex(l => l.code === speechLang) + 1) % LANGUAGES.length];
     setSpeechLang(next.code, true);
     // A recognizer already running is locked to the old language, so cycle it.
-    if(voiceControl && !keypadOpen()){ voiceControl.pause(); voiceControl.resume(); }
+    if(voiceControl) voiceControl.restart();
   };
 
   // ================= ON-SCREEN KEYPAD =================
@@ -1696,7 +1712,9 @@
     const box = input.getBoundingClientRect();
     const overlap = box.bottom + 16 - keypad.getBoundingClientRect().top;
     if(overlap > 0) window.scrollBy(0, overlap);
-    if(voiceControl) voiceControl.pause();
+    // The microphone deliberately keeps running. Stopping and restarting it around
+    // the keypad was fragile: a start() that lands while the previous session is
+    // still releasing the mic throws, fires no onend, and leaves voice dead.
   }
 
   // byUser means the player dismissed it themselves, which is them choosing voice
@@ -1707,7 +1725,6 @@
     document.body.classList.remove('keypad-open');
     activeInput = null;
     if(byUser) setPreferredInput('voice');
-    if(voiceControl) voiceControl.resume();
   }
 
   function pressKey(key){
@@ -1738,7 +1755,13 @@
   document.addEventListener('pointerdown', e => {
     const input = e.target.closest('.answer-input');
     if(input){
-      if(!input.disabled) showKeypad(input);
+      if(input.disabled) return;
+      // Focus is what summons the device keyboard, and it would fight our own pad
+      // for the bottom of the screen. On touch the field never takes focus at all;
+      // the pad writes to it directly, so nothing is lost. A mouse still focuses it
+      // so a physical keyboard and Enter keep working.
+      if(e.pointerType === 'touch') e.preventDefault();
+      showKeypad(input);
     } else if(!e.target.closest('.keypad')){
       hideKeypad(true);
     }
