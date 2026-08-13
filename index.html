@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Multiplication Mania!</title>
+  <title>Number Mania!</title>
   <style>
     :root {
       --primary: #4b9cff;
@@ -220,6 +220,10 @@
       text-align: center;
       white-space: normal;
     }
+
+    /* Four sections abreast on a wide screen, two-by-two on a tablet */
+    .mode-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    .mode-grid-4 .mode-card { padding: 18px 14px; }
 
     .mode-card:hover { border-color: var(--primary); }
     .mode-icon { font-size: 2.6rem; line-height: 1; }
@@ -440,7 +444,7 @@
   <div id="header-info">
     <span id="levelDisplay">Level: 1</span>
   </div>
-  <button id="highScoresBtn" class="secondary" type="button">Table Times</button>
+  <button id="highScoresBtn" class="secondary" type="button">My Progress</button>
 </header>
 
 <main id="main"></main>
@@ -513,12 +517,21 @@
   let tableStartTime = null;
 
   // STATE
-  const state = { level:1, currentTable:null, mode:null, rung:1, bestRung:1 };
+  const state = { level:1, currentTable:null, mode:null, op:null, ladders:{} };
 
   function saveState(){ localStorage.setItem(GAME_KEY, JSON.stringify(state)); }
   function loadState(){
     const s = localStorage.getItem(GAME_KEY);
-    if(s) Object.assign(state, JSON.parse(s));
+    if(!s) return;
+    const saved = JSON.parse(s);
+    // A climb saved before there were four operations was a multiplication climb.
+    if(saved.rung !== undefined && !saved.ladders){
+      saved.ladders = { mul: { rung: saved.rung, best: saved.bestRung || saved.rung } };
+    }
+    delete saved.rung;
+    delete saved.bestRung;
+    Object.assign(state, saved);
+    if(!state.ladders) state.ladders = {};
   }
   function clearState(){ localStorage.removeItem(GAME_KEY); }
 
@@ -541,11 +554,12 @@
 
   function updateHeader(){
     if(state.mode === 'ladder'){
-      levelDisplay.textContent = `Rung ${state.rung} of ${LADDER_RUNGS} — best ${state.bestRung}`;
+      const op = OPS[state.op] || OPS.mul, l = ladderState(op.key);
+      levelDisplay.textContent = `${op.icon} Rung ${l.rung} of ${LADDER_RUNGS} — best ${l.best}`;
     } else if(state.mode === 'tables'){
       levelDisplay.textContent = 'Level: ' + state.level;
     } else {
-      levelDisplay.textContent = 'Multiplication Mania';
+      levelDisplay.textContent = 'Number Mania';
     }
     saveState();
   }
@@ -569,14 +583,19 @@
     }
     html += `</ol>`;
 
-    const tricky = trickiestFacts(5);
     html += `<h2>Tricky For You</h2>`;
-    if(!tricky.length){
+    const trickyByOp = OP_KEYS
+      .map(k => ({ op: OPS[k], list: trickiestFacts(OPS[k], 4) }))
+      .filter(x => x.list.length);
+    if(!trickyByOp.length){
       html += `<p>Nothing yet — these appear once you've missed a fact a couple of times.</p>`;
     } else {
-      html += `<p>These are pushed higher up the ladder so you meet them more often.</p><ol>`;
-      tricky.forEach(t => html += `<li>${t.key.replace('x',' × ')} — missed ${t.misses} of ${t.attempts}</li>`);
-      html += `</ol>`;
+      html += `<p>These are pushed higher up the ladder so you meet them more often.</p>`;
+      trickyByOp.forEach(({ op, list }) => {
+        html += `<p><b>${op.icon} ${op.short}</b></p><ol>`;
+        list.forEach(t => html += `<li>${t.label} — missed ${t.misses} of ${t.attempts}</li>`);
+        html += `</ol>`;
+      });
     }
     html += `<button id="closeHS">Close</button>`;
     showOverlay(html);
@@ -795,36 +814,80 @@
   function startGame(){
     stopListening();
     loadState();
-    showModePicker();
+    showHomeMenu();
   }
 
-  function showModePicker(){
+  // The home menu: one card per operation, each showing how far that climb has got.
+  function showHomeMenu(){
     stopListening();
     state.mode = null;
+    state.op = null;
     updateHeader();
+
+    const cards = OP_KEYS.map(k => {
+      const op = OPS[k], l = ladderState(k);
+      const progress = l.best > 1
+        ? `Best so far: rung ${l.best} of ${LADDER_RUNGS}.`
+        : 'Not started yet.';
+      return `
+        <button class="mode-card" data-op="${k}">
+          <span class="mode-icon">${op.icon}</span>
+          <span class="mode-name">${op.name}</span>
+          <span class="mode-desc">${op.blurb}<br><b>${progress}</b></span>
+        </button>`;
+    }).join('');
+
     main.innerHTML = `
       <div class="card">
-        <h2>Choose your game</h2>
-        <p class="subtitle">Two ways to practise. Say your answer or type it — both work.</p>
+        <h2>What shall we practise?</h2>
+        <p class="subtitle">Say your answer or tap it in — both work everywhere.</p>
+        <div class="mode-grid mode-grid-4">${cards}</div>
+      </div>`;
+
+    main.querySelectorAll('[data-op]').forEach(btn =>
+      btn.onclick = () => showOperationMenu(OPS[btn.dataset.op]));
+  }
+
+  // One operation's menu. Every operation has the ladder; multiplication also keeps
+  // Tables Adventure, whose stages are about times tables specifically.
+  function showOperationMenu(op){
+    stopListening();
+    state.mode = null;
+    state.op = op.key;
+    ladderOp = op;
+    updateHeader();
+
+    const l = ladderState(op.key);
+    const resume = l.rung > 1 ? ` You're on rung ${l.rung}.` : '';
+    const tables = op.key === 'mul' ? `
+      <button class="mode-card" id="modeTables">
+        <span class="mode-icon">🎡</span>
+        <span class="mode-name">Tables Adventure</span>
+        <span class="mode-desc">Pick or spin a single table, then work it from adding up to a timed quiz.</span>
+      </button>` : '';
+
+    main.innerHTML = `
+      <div class="card">
+        <h2>${op.icon} ${op.short}</h2>
+        <p class="subtitle">${op.blurb}</p>
         <div class="mode-grid">
-          <button class="mode-card" id="modeTables">
-            <span class="mode-icon">🎡</span>
-            <span class="mode-name">Tables Adventure</span>
-            <span class="mode-desc">Pick or spin a single table, then work it from adding up to a timed quiz.</span>
-          </button>
           <button class="mode-card" id="modeLadder">
             <span class="mode-icon">🪜</span>
             <span class="mode-name">Ladder Climb</span>
-            <span class="mode-desc">All tables mixed across ${LADDER_RUNGS} rungs of rising difficulty. Right answer climbs, wrong answer drops one — you're never out. Best so far: rung ${state.bestRung||1}.</span>
+            <span class="mode-desc">${LADDER_RUNGS} rungs of rising difficulty. Right answer climbs, wrong answer drops one — you're never out.${resume}</span>
           </button>
+          ${tables}
         </div>
+        <button id="backHome" class="secondary">← All sections</button>
       </div>`;
 
-    document.getElementById('modeTables').onclick = startTablesMode;
+    document.getElementById('backHome').onclick = showHomeMenu;
     document.getElementById('modeLadder').onclick = () => {
-      if(state.rung > 1 && !confirm(`Continue your climb at rung ${state.rung}?`)) state.rung = 1;
-      startLadderMode();
+      if(l.rung > 1 && !confirm(`Continue your climb at rung ${l.rung}?`)) l.rung = 1;
+      startLadderMode(op);
     };
+    const tablesBtn = document.getElementById('modeTables');
+    if(tablesBtn) tablesBtn.onclick = startTablesMode;
   }
 
   function startTablesMode(){
@@ -1086,7 +1149,7 @@
       listenForNumber(expected, statusEl, () => {
         // One record per question: the quiz retries until correct, so "did they get
         // it first time" is the signal, and it feeds the ladder's personal history.
-        recordAnswer(n, questions[qIdx], !missedThis);
+        recordAnswer(OPS.mul, n, questions[qIdx], !missedThis);
         qIdx++;
         if(qIdx>=questions.length){
           const totalTime = Math.round((Date.now() - tableStartTime)/1000);
@@ -1121,12 +1184,18 @@
   }
 
   // ================= DIFFICULTY MODEL =================
-  // All 55 unique facts, easiest first. This is a taught order, not a computed one:
-  // the x1 and x10 tables are cleared as whole blocks before the rest interleaves,
-  // squares are grouped early because they get memorised as a set, and the x9 facts
-  // sit high because the 10x-x trick is one more step, not one fewer.
-  // Order is authored deliberately — edit this list to change what the ladder asks.
-  const FACT_ORDER = [
+  // Every question in every operation is generated from one base pair (a, b).
+  // Multiplication asks a x b; division asks (a x b) / b, so it inherits the
+  // multiplication order exactly. Addition asks a + b; subtraction asks
+  // (a + b) - b. That is not a shortcut: undoing a fact is the same fact, and a
+  // subtraction needs a borrow in precisely the columns its addition carried.
+
+  // All 55 unique multiplication facts, easiest first. A taught order, not a
+  // computed one: the x1 and x10 tables are cleared as whole blocks before the
+  // rest interleaves, squares are grouped early because they get memorised as a
+  // set, and the x9 facts sit high because the 10x-x trick is one more step, not
+  // one fewer. Edit this list to change what the multiplication ladder asks.
+  const MUL_ORDER = [
     [1,1],  [1,10], [1,2],  [1,5],  [1,3],  [1,4],  [1,9],  [1,6],  [1,7],  [1,8],
     [10,10],[10,2], [10,5], [10,3], [10,4], [10,9], [10,6], [10,7], [10,8],
     [2,2],  [2,5],  [2,3],  [2,4],  [2,6],  [3,3],  [5,5],  [2,7],  [3,4],  [2,9],
@@ -1135,21 +1204,65 @@
     [9,6],  [9,7],  [9,8],  [6,7],  [6,8],  [7,8]
   ];
 
-  // Both orientations map to the same rank: 2 x 5 and 5 x 2 are one fact.
-  const FACT_RANK = (() => {
-    const ranks = {};
-    FACT_ORDER.forEach(([a, b], i) => { ranks[a + 'x' + b] = i; ranks[b + 'x' + a] = i; });
-    return ranks;
-  })();
+  // The same idea for the 55 addition facts. Here the ordering signals are
+  // counting-on (+1, +2), adding ten, doubles and near-doubles being chunked, and
+  // crossing ten being the step that actually costs something — which is why
+  // 6+8, 7+9 and 7+8 land at the top while 9+10 stays near the bottom.
+  const ADD_ORDER = [
+    [1,1],  [1,10], [1,2],  [10,10],[2,2],  [2,10], [1,3],  [2,3],  [3,10], [3,3],
+    [1,4],  [1,5],  [1,9],  [4,10], [5,10], [2,4],  [1,6],  [2,5],  [9,10], [4,4],
+    [5,5],  [1,7],  [3,4],  [1,8],  [6,10], [2,6],  [3,5],  [7,10], [8,10], [4,5],
+    [2,7],  [2,8],  [3,6],  [3,7],  [4,6],  [2,9],  [9,9],  [6,6],  [3,9],  [7,7],
+    [8,8],  [5,6],  [3,8],  [4,9],  [5,9],  [8,9],  [4,7],  [4,8],  [5,7],  [6,7],
+    [5,8],  [6,9],  [7,8],  [7,9],  [6,8]
+  ];
 
-  // Position in that order, spread evenly over 0-100.
-  function factScore(a, b){
+  // Both orientations share one rank: 2 x 5 and 5 x 2 are one fact.
+  function buildRanks(order){
+    const ranks = {};
+    order.forEach(([a, b], i) => { ranks[a + ':' + b] = i; ranks[b + ':' + a] = i; });
+    return ranks;
+  }
+  const MUL_RANK = buildRanks(MUL_ORDER);
+  const ADD_RANK = buildRanks(ADD_ORDER);
+
+  // Position in the order, spread evenly over 0-100.
+  function orderScore(ranks, size, a, b){
     if(!a || !b) return 0;
-    const rank = FACT_RANK[a + 'x' + b];
-    return rank === undefined ? 0 : Math.round(100 * rank / (FACT_ORDER.length - 1));
+    const rank = ranks[a + ':' + b];
+    return rank === undefined ? 0 : Math.round(100 * rank / (size - 1));
   }
 
+  const factScore    = (a, b) => orderScore(MUL_RANK, MUL_ORDER.length, a, b);
+  const addFactScore = (a, b) => orderScore(ADD_RANK, ADD_ORDER.length, a, b);
+
   const digitsOf = n => String(n).split('').map(Number);
+
+  // Columns that carry when a and b are added. A subtraction borrows in exactly
+  // these columns, so the same count scores both operations.
+  function addCarryCount(a, b){
+    const x = digitsOf(a).reverse(), y = digitsOf(b).reverse();
+    let carry = 0, count = 0;
+    for(let i = 0; i < Math.max(x.length, y.length); i++){
+      carry = Math.floor(((x[i] || 0) + (y[i] || 0) + carry) / 10);
+      if(carry > 0) count++;
+    }
+    return count;
+  }
+
+  // Multi-digit addition. Carrying is the whole difficulty; digit count only sets
+  // how much bookkeeping surrounds it.
+  function addWideScore(a, b){
+    const digits = Math.max(String(a).length, String(b).length);
+    // Two digits is the entry point and costs nothing extra: 11 + 2 is genuinely
+    // easier than 7 + 8, and charging for the width would leave a gap between the
+    // hardest fact and the cheapest wide sum that no question could fill.
+    let s = 20 * (digits - 2);
+    s += 14 * addCarryCount(a, b);
+    s += 6 * Math.max(0, String(a + b).length - 2);
+    if(String(a).length > 1 && String(b).length > 1) s += 10;   // two wide operands
+    return Math.max(0, Math.round(s));
+  }
 
   // Carries generated while multiplying a multi-digit number by one digit.
   function partialCarries(multi, single){
@@ -1196,10 +1309,71 @@
     return Math.max(0, Math.round(s));
   }
 
-  // Unified scale: single-digit facts occupy 0-100, everything wider floors at 100,
-  // so no two-digit question can appear before the whole times table is cleared.
-  function difficulty(a, b){
-    return (a <= 10 && b <= 10) ? factScore(a, b) : 100 + multiScore(a, b);
+  // ================= OPERATIONS =================
+  // Each operation says how a base pair becomes a question, how hard that pair is,
+  // and how its 30 rungs are laid out. Everything downstream — pools, the ladder,
+  // the personal history — is driven from this table and never names an operation.
+  //
+  // Unified scale per operation: single-digit facts occupy 0-100 and anything wider
+  // floors at 100, so no two-digit question can appear before the facts are cleared.
+  const OPS = {
+    add: {
+      key:'add', name:'Sums', short:'Addition', icon:'➕', symbol:'+',
+      blurb:'Adding, from 1 + 1 up to carrying across three digits.',
+      fact: addFactScore, wide: addWideScore, offset: 0,
+      render: (a, b) => `${a} + ${b}`,
+      answer: (a, b) => a + b,
+      anchors: [[1,2],[7,45],[14,96],[16,106],[20,128],[25,155],[30,180]],
+      shapes: r => r <= 14 ? ['1x1']
+                 : r <= 18 ? ['1x1','1x2']
+                 : r <= 23 ? ['1x2','2x2']
+                 : r <= 27 ? ['2x2','1x3']
+                           : ['2x2','1x3','3x3']
+    },
+    sub: {
+      key:'sub', name:'Subtractions', short:'Subtraction', icon:'➖', symbol:'−',
+      blurb:'Taking away, including borrowing across columns.',
+      fact: addFactScore, wide: addWideScore, offset: 8,   // undoing costs a little more
+      render: (a, b) => `${a + b} − ${b}`,
+      answer: (a, b) => a,
+      anchors: [[1,10],[7,53],[14,104],[16,114],[20,136],[25,163],[30,188]],
+      shapes: r => r <= 14 ? ['1x1']
+                 : r <= 18 ? ['1x1','1x2']
+                 : r <= 23 ? ['1x2','2x2']
+                 : r <= 27 ? ['2x2','1x3']
+                           : ['2x2','1x3','3x3']
+    },
+    mul: {
+      key:'mul', name:'Multiplications', short:'Multiplication', icon:'✖️', symbol:'×',
+      blurb:'All the tables mixed, up to two-digit work like 25 × 46.',
+      fact: factScore, wide: multiScore, offset: 0,
+      render: (a, b) => `${a} × ${b}`,
+      answer: (a, b) => a * b,
+      anchors: [[1,2],[6,30],[12,58],[18,95],[21,120],[24,150],[27,195],[30,265]],
+      shapes: r => r <= 18 ? ['1x1']
+                 : r <= 23 ? ['1x1','1x2']
+                 : r <= 27 ? ['1x2','1x3','2x2']
+                           : ['2x2','1x3','2x3']
+    },
+    div: {
+      key:'div', name:'Divisions', short:'Division', icon:'➗', symbol:'÷',
+      blurb:'Sharing out exactly — every answer is a whole number.',
+      fact: factScore, wide: multiScore, offset: 10,   // harder than the fact it undoes
+      render: (a, b) => `${a * b} ÷ ${b}`,
+      answer: (a, b) => a,
+      anchors: [[1,12],[6,40],[12,68],[18,105],[21,130],[24,160],[27,205],[30,272]],
+      shapes: r => r <= 18 ? ['1x1']
+                 : r <= 23 ? ['1x1','1x2']
+                 : r <= 27 ? ['1x2','1x3','2x2']
+                           : ['2x2','1x3','2x3']
+    }
+  };
+
+  const OP_KEYS = ['add','sub','mul','div'];
+
+  function difficulty(op, a, b){
+    const base = (a <= 10 && b <= 10) ? op.fact(a, b) : 100 + op.wide(a, b);
+    return base + op.offset;
   }
 
   // ================= PERSONAL HISTORY =================
@@ -1213,13 +1387,26 @@
 
   const storage = () => { try { return typeof localStorage === 'undefined' ? null : localStorage; } catch(_) { return null; } };
 
+  const emptyBook = () => ({ facts:{}, shapes:{} });
+
   let stats = (() => {
+    const blank = () => { const s = {}; OP_KEYS.forEach(k => s[k] = emptyBook()); return s; };
     try {
       const store = storage();
       const raw = store && JSON.parse(store.getItem('mulFactStats'));
-      if(raw && raw.facts && raw.shapes) return raw;
+      if(raw && raw.facts && raw.shapes){
+        // Everything recorded before there were four operations was multiplication.
+        const migrated = blank();
+        migrated.mul = raw;
+        return migrated;
+      }
+      if(raw && typeof raw === 'object'){
+        const merged = blank();
+        OP_KEYS.forEach(k => { if(raw[k] && raw[k].facts && raw[k].shapes) merged[k] = raw[k]; });
+        return merged;
+      }
     } catch(_) {}
-    return { facts:{}, shapes:{} };
+    return blank();
   })();
 
   function saveStats(){
@@ -1227,30 +1414,33 @@
     if(store) try { store.setItem('mulFactStats', JSON.stringify(stats)); } catch(_) {}
   }
 
+  const bookFor = op => stats[op.key] || (stats[op.key] = emptyBook());
+
   // Single-digit facts are tracked one by one; wider questions are tracked by shape,
-  // because there are unboundedly many of them and missing 25 x 46 says nothing about 25 x 47.
+  // because there are unboundedly many and missing 25 x 46 says nothing about 25 x 47.
   function questionKey(a, b){
     if(a <= 10 && b <= 10){
       const [x, y] = a <= b ? [a, b] : [b, a];
-      return { bucket:'facts', key: x + 'x' + y };
+      return { bucket:'facts', key: x + ':' + y };
     }
     const da = String(a).length, db = String(b).length;
     const [x, y] = da <= db ? [da, db] : [db, da];
-    return { bucket:'shapes', key: x + 'd x ' + y + 'd' };
+    return { bucket:'shapes', key: x + 'd:' + y + 'd' };
   }
 
-  function recordAnswer(a, b, correct){
+  function recordAnswer(op, a, b, correct){
     const { bucket, key } = questionKey(a, b);
-    const rec = stats[bucket][key] || (stats[bucket][key] = { n:0, w:0 });
+    const book = bookFor(op)[bucket];
+    const rec = book[key] || (book[key] = { n:0, w:0 });
     rec.n++;
     if(!correct) rec.w++;
     saveStats();
   }
 
   // How far this player's own history moves a question on the difficulty scale.
-  function personalShift(a, b){
+  function personalShift(op, a, b){
     const { bucket, key } = questionKey(a, b);
-    const rec = stats[bucket][key];
+    const rec = bookFor(op)[bucket][key];
     if(!rec || !rec.n) return 0;
     // Smoothed against a prior so the first miss doesn't declare a fact "hard".
     const missRate = (rec.w + PRIOR_ATTEMPTS * PRIOR_MISS) / (rec.n + PRIOR_ATTEMPTS);
@@ -1260,14 +1450,17 @@
       : Math.round(MAX_SHIFT_DOWN * Math.max(-1, delta / PRIOR_MISS));
   }
 
-  function personalDifficulty(a, b){
-    return difficulty(a, b) + personalShift(a, b);
+  function personalDifficulty(op, a, b){
+    return difficulty(op, a, b) + personalShift(op, a, b);
   }
 
-  function trickiestFacts(limit){
-    return Object.entries(stats.facts)
+  function trickiestFacts(op, limit){
+    return Object.entries(bookFor(op).facts)
       .filter(([, r]) => r.n >= 2 && r.w > 0)
-      .map(([key, r]) => ({ key, misses: r.w, attempts: r.n, rate: r.w / r.n }))
+      .map(([key, r]) => {
+        const [a, b] = key.split(':').map(Number);
+        return { key, label: op.render(a, b), misses: r.w, attempts: r.n, rate: r.w / r.n };
+      })
       .sort((x, y) => y.rate - x.rate || y.misses - x.misses)
       .slice(0, limit);
   }
@@ -1275,27 +1468,18 @@
   // ================= LADDER MODE =================
   const LADDER_RUNGS = 30;
 
-  // Difficulty centre of each rung, interpolated between these anchors.
-  const RUNG_ANCHORS = [[1,2],[6,30],[12,58],[18,95],[21,120],[24,150],[27,195],[30,265]];
-
-  function rungCenter(r){
-    for(let i = 0; i < RUNG_ANCHORS.length - 1; i++){
-      const [r1, c1] = RUNG_ANCHORS[i], [r2, c2] = RUNG_ANCHORS[i+1];
+  // Difficulty centre of each rung, interpolated between the operation's anchors.
+  function rungCenter(op, r){
+    const anchors = op.anchors;
+    for(let i = 0; i < anchors.length - 1; i++){
+      const [r1, c1] = anchors[i], [r2, c2] = anchors[i+1];
       if(r >= r1 && r <= r2) return c1 + (c2 - c1) * (r - r1) / (r2 - r1);
     }
-    return RUNG_ANCHORS[RUNG_ANCHORS.length - 1][1];
+    return anchors[anchors.length - 1][1];
   }
 
   // Window around the centre a question may be drawn from.
   const rungHalfWidth = r => r <= 4 ? 14 : (r <= 18 ? 9 : 16);
-
-  // Which operand shapes a rung is allowed to serve, so big numbers can't arrive early.
-  function rungShapes(r){
-    if(r <= 18) return ['1x1'];
-    if(r <= 23) return ['1x1','1x2'];
-    if(r <= 27) return ['1x2','1x3','2x2'];
-    return ['2x2','1x3','2x3'];
-  }
 
   const ZONES = [
     { max:6,  name:'Ground', cls:'z1' },
@@ -1306,42 +1490,47 @@
   ];
   const zoneOf = r => ZONES.find(z => r <= z.max) || ZONES[ZONES.length - 1];
 
-  function eachPairOfShape(shape, visit){
-    switch(shape){
-      case '1x1': for(let a=1;a<=10;a++)   for(let b=a;b<=10;b++)  visit(a,b); break;
-      case '1x2': for(let a=11;a<=99;a++)  for(let b=2;b<=9;b++)   visit(a,b); break;
-      case '2x2': for(let a=11;a<=99;a++)  for(let b=a;b<=99;b++)  visit(a,b); break;
-      case '1x3': for(let a=101;a<=999;a+=2) for(let b=2;b<=9;b++) visit(a,b); break;
-      case '2x3': for(let a=101;a<=999;a+=7) for(let b=11;b<=99;b++) visit(a,b); break;
-    }
-  }
+  // Operand shapes, shared by every operation; which ones a rung may serve is the
+  // operation's business, so big numbers can never arrive early.
+  const SHAPES = {
+    '1x1': visit => { for(let a=1;a<=10;a++)     for(let b=a;b<=10;b++)   visit(a,b); },
+    '1x2': visit => { for(let a=11;a<=99;a++)    for(let b=2;b<=9;b++)    visit(a,b); },
+    '2x2': visit => { for(let a=11;a<=99;a++)    for(let b=a;b<=99;b++)   visit(a,b); },
+    '1x3': visit => { for(let a=101;a<=999;a+=2) for(let b=2;b<=9;b++)    visit(a,b); },
+    '2x3': visit => { for(let a=101;a<=999;a+=7) for(let b=11;b<=99;b++)  visit(a,b); },
+    '3x3': visit => { for(let a=101;a<=999;a+=5) for(let b=a;b<=999;b+=5) visit(a,b); }
+  };
 
-  const rungWindow = r => [rungCenter(r) - rungHalfWidth(r), rungCenter(r) + rungHalfWidth(r)];
+  const rungWindow = (op, r) => {
+    const c = rungCenter(op, r), h = rungHalfWidth(r);
+    return [c - h, c + h];
+  };
 
   // Candidates for a rung, cached on base difficulty alone so the cache stays valid
   // as the player's history changes. Widened by the most a personal shift can move a
   // question, so pickQuestion has something to draw from in both directions.
   const rungPools = new Map();
-  function rungPool(r){
-    if(rungPools.has(r)) return rungPools.get(r);
-    const [lo, hi] = rungWindow(r);
+  function rungPool(op, r){
+    const cacheKey = op.key + '#' + r;
+    if(rungPools.has(cacheKey)) return rungPools.get(cacheKey);
+    const [lo, hi] = rungWindow(op, r);
     const min = lo - MAX_SHIFT_UP, max = hi + MAX_SHIFT_DOWN;
     const pool = [];
-    rungShapes(r).forEach(shape => eachPairOfShape(shape, (a, b) => {
-      const d = difficulty(a, b);
+    op.shapes(r).forEach(shape => SHAPES[shape]((a, b) => {
+      const d = difficulty(op, a, b);
       // Base difficulty is cached alongside the pair: it never changes, and
       // recomputing it for every candidate on every question is pure waste.
       if(d >= min && d <= max) pool.push([a, b, d]);
     }));
-    rungPools.set(r, pool);
+    rungPools.set(cacheKey, pool);
     return pool;
   }
 
   let recentQuestions = [];
-  function pickQuestion(r){
-    const candidates = rungPool(r);
+  function pickQuestion(op, r){
+    const candidates = rungPool(op, r);
     if(!candidates.length) return [7, 8];
-    const [lo, hi] = rungWindow(r);
+    const [lo, hi] = rungWindow(op, r);
 
     const within = adjust => candidates.filter(([a, b, d]) => {
       const score = d + adjust(a, b);
@@ -1350,14 +1539,14 @@
 
     // Personal difficulty first; fall back to the general model, then to anything
     // in range, so a rung can never run out of questions.
-    let pool = within(personalShift);
+    let pool = within((a, b) => personalShift(op, a, b));
     if(!pool.length) pool = within(() => 0);
     if(!pool.length) pool = candidates;
 
-    const fresh = pool.filter(p => !recentQuestions.includes(p[0] + 'x' + p[1]));
+    const fresh = pool.filter(p => !recentQuestions.includes(p[0] + ':' + p[1]));
     const src = fresh.length ? fresh : pool;
     const [a, b] = src[Math.floor(Math.random() * src.length)];
-    recentQuestions.push(a + 'x' + b);
+    recentQuestions.push(a + ':' + b);
     if(recentQuestions.length > 8) recentQuestions.shift();
     return Math.random() < 0.5 ? [a, b] : [b, a];   // show both orientations
   }
@@ -1465,29 +1654,49 @@
     if(preferredInput === 'keypad' && inputEl) showKeypad(inputEl);
   }
 
-  function ladderRailHtml(current){
+  // Per-operation climb, so progress in one never disturbs another.
+  function ladderState(opKey){
+    if(!state.ladders) state.ladders = {};
+    const l = state.ladders[opKey] || (state.ladders[opKey] = { rung:1, best:1 });
+    if(!l.rung || l.rung < 1) l.rung = 1;
+    if(!l.best || l.best < 1) l.best = 1;
+    return l;
+  }
+
+  let ladderOp = OPS.mul;
+
+  function ladderRailHtml(current, best){
     let html = '';
     for(let r = 1; r <= LADDER_RUNGS; r++){
       const cls = ['rung', zoneOf(r).cls];
       if(r < current) cls.push('done');
       if(r === current) cls.push('current');
-      if(r === state.bestRung && state.bestRung > current) cls.push('best-mark');
+      if(r === best && best > current) cls.push('best-mark');
       html += `<div class="${cls.join(' ')}">${r === current ? '<span class="climber">🧗</span>' : ''}</div>`;
     }
     return html;
   }
 
-  function startLadderMode(){
+  function paintRung(op, r){
+    const l = ladderState(op.key);
+    const zone = zoneOf(r);
+    document.getElementById('ladderRail').innerHTML = ladderRailHtml(r, l.best);
+    document.getElementById('rungBadge').innerHTML =
+      `<span class="zone-tag ${zone.cls}">${zone.name}</span>Rung ${r} of ${LADDER_RUNGS}`;
+  }
+
+  function startLadderMode(op){
     stopListening();
+    ladderOp = op;
     state.mode = 'ladder';
-    if(!state.rung || state.rung < 1) state.rung = 1;
-    if(!state.bestRung || state.bestRung < 1) state.bestRung = 1;
+    state.op = op.key;
+    const l = ladderState(op.key);
     recentQuestions = [];
     saveState();
 
     main.innerHTML = `
       <div class="card">
-        <h2>Ladder Climb</h2>
+        <h2>${op.icon} ${op.short} Ladder</h2>
         <p class="subtitle">Right climbs a rung, wrong drops one — you're never knocked out.</p>
         <div class="ladder-layout">
           <div class="ladder-rail" id="ladderRail"></div>
@@ -1503,81 +1712,75 @@
         </div>
       </div>`;
 
-    const startZone = zoneOf(state.rung);
-    document.getElementById('ladderRail').innerHTML = ladderRailHtml(state.rung);
-    document.getElementById('rungBadge').innerHTML =
-      `<span class="zone-tag ${startZone.cls}">${startZone.name}</span>Rung ${state.rung} of ${LADDER_RUNGS}`;
-    document.getElementById('ladderMenu').onclick = () => { stopListening(); showModePicker(); };
+    paintRung(op, l.rung);
+    document.getElementById('ladderMenu').onclick = () => { stopListening(); showOperationMenu(op); };
     updateHeader();
 
     const startBtn = document.getElementById('ladderSubmit');
     startBtn.textContent = 'Start';
-    startBtn.onclick = () => askLadderQuestion();
+    startBtn.onclick = () => askLadderQuestion(op);
     document.getElementById('answerInput').disabled = true;
   }
 
-  function askLadderQuestion(){
-    const r = state.rung;
-    const [a, b] = pickQuestion(r);
-    const expected = a * b;
-    const zone = zoneOf(r);
+  function askLadderQuestion(op){
+    const l = ladderState(op.key);
+    const r = l.rung;
+    const [a, b] = pickQuestion(op, r);
+    const expected = op.answer(a, b);
 
-    const qEl      = document.getElementById('ladderQ');
     const statusEl = document.getElementById('ladderStatus');
     const heardEl  = document.getElementById('ladderHeard');
     const inputEl  = document.getElementById('answerInput');
     const submitEl = document.getElementById('ladderSubmit');
 
-    document.getElementById('ladderRail').innerHTML = ladderRailHtml(r);
-    document.getElementById('rungBadge').innerHTML =
-      `<span class="zone-tag ${zone.cls}">${zone.name}</span>Rung ${r} of ${LADDER_RUNGS}`;
-    qEl.textContent = `${a} × ${b} = ?`;
+    paintRung(op, r);
+    document.getElementById('ladderQ').textContent = `${op.render(a, b)} = ?`;
     heardEl.classList.remove('visible','correct','incorrect');
     submitEl.textContent = 'Check';
     updateHeader();
 
     askOnce(expected, statusEl, heardEl, inputEl, submitEl, correct => {
-      recordAnswer(a, b, correct);
-      const previousBest = state.bestRung;
+      recordAnswer(op, a, b, correct);
+      const previousBest = l.best;
       if(correct){
         if(r >= LADDER_RUNGS){
-          state.bestRung = LADDER_RUNGS;
+          l.best = LADDER_RUNGS;
           saveState();
           statusEl.innerHTML = `<span class="good">That's the top!</span>`;
-          setTimeout(ladderSummit, 900);
+          setTimeout(() => ladderSummit(op), 900);
           return;
         }
-        state.rung = r + 1;
-        state.bestRung = Math.max(state.bestRung, state.rung);
+        l.rung = r + 1;
+        l.best = Math.max(l.best, l.rung);
         saveState();
         // Reaching a new zone or a new personal best is this mode's level-up, so it
         // gets the level-up fanfare instead of the plain correct-answer chime.
-        const climbedZone = zoneOf(state.rung) !== zoneOf(r);
-        const newBest = state.rung > previousBest;
+        const climbedZone = zoneOf(l.rung) !== zoneOf(r);
+        const newBest = l.rung > previousBest;
         playSfx(climbedZone || newBest ? audioLevelUp : audioSuccess);
         statusEl.innerHTML = climbedZone
-          ? `<span class="good">Correct — into the ${zoneOf(state.rung).name} zone!</span>`
-          : `<span class="good">Correct — up to rung ${state.rung}!</span>`;
-        document.getElementById('ladderRail').innerHTML = ladderRailHtml(state.rung);
-        setTimeout(askLadderQuestion, climbedZone ? 1200 : 900);
+          ? `<span class="good">Correct — into the ${zoneOf(l.rung).name} zone!</span>`
+          : `<span class="good">Correct — up to rung ${l.rung}!</span>`;
+        paintRung(op, l.rung);
+        setTimeout(() => askLadderQuestion(op), climbedZone ? 1200 : 900);
       } else {
         playSfx(audioFail);
-        state.rung = Math.max(1, r - 1);
+        l.rung = Math.max(1, r - 1);
         saveState();
-        const where = r > 1 ? `Down to rung ${state.rung}.` : 'You stay on rung 1.';
-        statusEl.innerHTML = `<span class="bad">${a} × ${b} = ${expected}.</span> ${where}`;
-        document.getElementById('ladderRail').innerHTML = ladderRailHtml(state.rung);
-        setTimeout(askLadderQuestion, 2400);   // the fall is the teaching moment — let it land
+        const where = r > 1 ? `Down to rung ${l.rung}.` : 'You stay on rung 1.';
+        statusEl.innerHTML = `<span class="bad">${op.render(a, b)} = ${expected}.</span> ${where}`;
+        paintRung(op, l.rung);
+        setTimeout(() => askLadderQuestion(op), 2400);   // let the fall land, it's the teaching moment
       }
     });
   }
 
-  function ladderSummit(){
+  function ladderSummit(op){
     stopListening();
     playSfx(audioLevelUp);
     main.innerHTML = `<div class="card">
-      <h2>🏔️ You reached the top! 🏔️</h2>
-      <p>All ${LADDER_RUNGS} rungs climbed — from 1 × 1 all the way to two-digit multiplications.</p>
+      <h2>🏔️ You topped the ${op.short} ladder! 🏔️</h2>
+      <p>All ${LADDER_RUNGS} rungs climbed.</p>
     </div>`;
     setTimeout(() => {
       showOverlay(`
@@ -1587,14 +1790,14 @@
         <button id="summitMenu" class="secondary">Menu</button>`);
       document.getElementById('climbAgain').onclick = () => {
         hideOverlay();
-        state.rung = 1;
-        startLadderMode();
+        ladderState(op.key).rung = 1;
+        startLadderMode(op);
       };
       document.getElementById('summitMenu').onclick = () => {
         hideOverlay();
-        state.rung = 1;
+        ladderState(op.key).rung = 1;
         saveState();
-        showModePicker();
+        showOperationMenu(op);
       };
     }, 200);
   }
