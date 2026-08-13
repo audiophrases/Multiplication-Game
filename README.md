@@ -12,7 +12,7 @@ A small web-based game for practising arithmetic — **sums, subtractions, multi
 
 3. Each challenge begins when you press its **Start** button. Answers can be spoken or typed.
 
-   - **🎤 EN / CA** (top right) switches speech recognition between English and Catalan. Both understand spoken number words as well as digits, including Catalan compounds like `vint-i-un` and `dos-cents cinquanta`.
+   - **🎤 EN / CA** (top right) switches language. It changes both the speech recognition **and the whole interface** — a child answering in Catalan should be reading Catalan. Both languages understand spoken number words as well as digits, including Catalan compounds like `vint-i-un` and `dos-cents cinquanta`. The choice is remembered.
    - **⛶** (top right) is fullscreen focus mode: it strips away the header, footer and other chrome so only the question remains. Where the browser refuses true fullscreen (iOS Safari), the stripped-back layout still applies.
    - Tapping the answer box opens an on-screen keypad with a **Send** button. The microphone keeps listening the whole time, so either route works and the first answer counts whichever way it arrives. On a phone or tablet the box never takes focus, so the device's own keyboard stays out of the way.
    - **⇠ Units first** on the keypad reverses digit entry, so an answer can be typed in the order written arithmetic produces it — right to left. With it on, `34 × 68 = 2312` is entered `2`, `1`, `3`, `2`. Backspace still undoes the digit you pressed last.
@@ -73,6 +73,19 @@ The scores above are what is hard for children in general. On top of them the ga
 - Single-digit facts are tracked individually; wider questions by shape (`2d × 2d`, `3d × 1d`), since missing `25 × 46` says nothing about `25 × 47`.
 
 The Challenge Quiz in Tables Adventure feeds the multiplication record, using whether you got each question right first time.
+
+## Translations
+
+Every interface string lives in `STRINGS` in `index.html`, keyed by language. Values are either plain strings or **functions of whatever the sentence needs**, so word order stays the translator's business rather than being fixed by concatenation at the call site:
+
+```js
+rungOf: (r, total) => `Rung ${r} of ${total}`      // en-US
+rungOf: (r, total) => `Graó ${r} de ${total}`      // ca-ES
+```
+
+To add a language, add a key to `LANGUAGES` (with its speech-recognition locale) and a matching block to `STRINGS`. Anything a translation omits falls back to English, so a missing key shows a real sentence rather than a raw identifier. The tests check that both tables have the same keys, that each key is the same *kind* of value in both (string, list or function of the same arity), and that no prose was left as an untranslated copy of the English.
+
+Switching language redraws the current screen. Mid-activity screens in Tables Adventure deliberately do not redraw — the chrome updates and the new language takes effect at the next screen, rather than restarting a run the player is part-way through.
 
 ## Testing
 

@@ -507,12 +507,249 @@
   const GAME_KEY = 'mulGameState';
   const HS_KEY   = 'mulTableTimes';
 
-  // MESSAGES
-  const CELEBRATIONS = [
-    "Great job!", "Well done!", "Fantastic!",
-    "You're amazing!", "Keep it up!", "Bravo!",
-    "Excellent work!", "You're a star!"
-  ];
+  // ================= UI LANGUAGE =================
+  // One setting drives both the recogniser and the interface: a child answering in
+  // Catalan should be reading Catalan. Values are either plain strings or functions
+  // of whatever the sentence needs, so word order stays the translator's business
+  // rather than being fixed by concatenation at the call site.
+  const STRINGS = {
+    'en-US': {
+      appName:'Number Mania', progressBtn:'My Progress', resetBtn:'Reset Progress',
+      headerRung:(icon,r,total,best)=>`${icon} Rung ${r} of ${total} — best ${best}`,
+      headerLevel:n=>`Level: ${n}`,
+
+      voiceLangTitle:name=>`Voice language: ${name} — tap to switch`,
+      voiceLangLabel:name=>`Voice language: ${name}`,
+      fullscreen:'Fullscreen', exitFullscreen:'Exit fullscreen',
+
+      keypadLabel:'Number keypad', send:'Send', deleteDigit:'Delete last digit',
+      unitsFirstOn:'⇠ Units first — ON', unitsFirstOff:'⇠ Units first — off',
+
+      homeTitle:'What shall we practise?',
+      homeSubtitle:'Say your answer or tap it in — both work everywhere.',
+      bestSoFar:(best,total)=>`Best so far: rung ${best} of ${total}.`,
+      notStarted:'Not started yet.',
+
+      'op.add.name':'Sums',           'op.add.short':'Addition',
+      'op.sub.name':'Subtractions',   'op.sub.short':'Subtraction',
+      'op.mul.name':'Multiplications','op.mul.short':'Multiplication',
+      'op.div.name':'Divisions',      'op.div.short':'Division',
+      'op.add.blurb':'Adding, from 1 + 1 up to carrying across three digits.',
+      'op.sub.blurb':'Taking away, including borrowing across columns.',
+      'op.mul.blurb':'All the tables mixed, up to two-digit work like 25 × 46.',
+      'op.div.blurb':'Sharing out exactly — every answer is a whole number.',
+
+      ladderName:'Ladder Climb',
+      ladderDesc:total=>`${total} rungs of rising difficulty. Right answer climbs, wrong answer drops one — you're never out.`,
+      resumeRung:r=>` You're on rung ${r}.`,
+      tablesName:'Tables Adventure',
+      tablesDesc:'Pick or spin a single table, then work it from adding up to a timed quiz.',
+      allSections:'← All sections',
+      confirmClimb:r=>`Continue your climb at rung ${r}?`,
+      confirmLevel:n=>`Continue at Level ${n}?`,
+      confirmReset:'Clear progress, recorded times & what the ladder has learned about you?',
+
+      ladderTitle:(icon,short)=>`${icon} ${short} Ladder`,
+      ladderSubtitle:"Right climbs a rung, wrong drops one — you're never knocked out.",
+      ready:'Ready?', yourAnswer:'Your answer:', heard:'Heard:',
+      pressStart:'Press Start to begin.', pressStartShort:'Press Start',
+      start:'Start', check:'Check', menu:'Menu', close:'Close', continueBtn:'Continue',
+      rungOf:(r,total)=>`Rung ${r} of ${total}`,
+      'zone.Ground':'Ground', 'zone.Lower':'Lower', 'zone.Middle':'Middle',
+      'zone.Upper':'Upper',  'zone.Summit':'Summit',
+
+      sayOrKeypad:'Say your answer, or use the keypad — first answer counts.',
+      keypadOpen:"Keypad open — tap Send when you're ready.",
+      noNumber:"Didn't catch a number — say it again.",
+      micBusy:'Microphone busy — use the keypad.',
+      tapKeys:'Tap the keys, then Send.',
+      listening:'Listening...',
+      troubleHearing:'Had trouble hearing you. Trying again...',
+      typedCorrect:v=>`Typed ${v}. Correct!`,
+      heardCorrect:(txt,v)=>`Heard "${txt}" → ${v}. Correct!`,
+      heardWrong:(txt,v)=>`Heard "${txt}"${v===null?'':` → ${v}`} — try again.`,
+      tryAgain:v=>`${v} — try again.`,
+      sayOrType:v=>`Say or type "${v}"`,
+      sayOrTypeMoveOn:v=>`Say or type "${v}" to move on.`,
+
+      atTheTop:"That's the top!",
+      correctUpTo:r=>`Correct — up to rung ${r}!`,
+      correctIntoZone:z=>`Correct — into the ${z} zone!`,
+      downToRung:r=>`Down to rung ${r}.`,
+      stayOnRung1:'You stay on rung 1.',
+      summitTitle:short=>`🏔️ You topped the ${short} ladder! 🏔️`,
+      summitBody:total=>`All ${total} rungs climbed.`,
+      summit:'Summit!', climbAgain:'Climb Again',
+
+      fastestFinishes:'Fastest Finishes', noTimes:'No recorded times yet.',
+      hsEntry:(init,table,secs,date)=>`${init} — Table ${table} in ${secs}s (${date})`,
+      trickyTitle:'Tricky For You',
+      trickyNone:"Nothing yet — these appear once you've missed a fact a couple of times.",
+      trickyIntro:'These are pushed higher up the ladder so you meet them more often.',
+      trickyLine:(label,misses,tries)=>`${label} — missed ${misses} of ${tries}`,
+      voiceOffTitle:'Voice input unavailable',
+      voiceOffBody:"Your browser needs speech recognition (try Chrome or Edge). You can still play with the on-screen keypad.",
+
+      chooseTable:'Choose a Times Table',
+      chooseTableSub:'Start anywhere you like. You can still spin the wheel for surprises later!',
+      selectTable:'Select a table to begin.',
+      spinInstead:'Spin the Wheel Instead',
+      tableSelected:v=>`Table of ${v} Selected`,
+      listenNoTyping:"We'll listen for your answers — or use the keypad.",
+      startPracticing:'Start Practicing',
+      spinTitle:'Spin to pick a table',
+      spinSub:'Every table up to 10 is waiting for you. Tap the wheel and get ready to speak your answers!',
+      spinBtn:'Spin the Wheel',
+      tablePicked:p=>`🎉 Table of ${p}! 🎉`, go:'Go!',
+      practiceAdding:n=>`Practice Adding ${n}`,
+      greatNext:'Great! Next one coming up...',
+      fillNext:n=>`Let's fill in a few blanks for ${n}.`,
+      fillTitle:(n,count)=>`Table of ${n} — Fill ${count} Blanks`,
+      fillSub:'Type or say the missing answers.',
+      niceBlank:'Nice! Here comes the next blank...',
+      quizTitle:n=>`Table of ${n} — Challenge Quiz`,
+      quizSub:'Say or type each answer.',
+      correctNext:'Correct! Next question coming...',
+      initialsPrompt:'Enter your initials to record your time:',
+      totalTime:s=>`Total Time: ${s}s`,
+      nextLevel:'Next Level',
+      winTitle:'🎉 You Won the Game! 🎉', winBody:'You finished all the tables!',
+      congrats:'Congratulations!', congratsBody:'Great work mastering your tables.',
+      playAgain:'Play Again',
+      celebrations:["Great job!","Well done!","Fantastic!","You're amazing!",
+                    "Keep it up!","Bravo!","Excellent work!","You're a star!"]
+    },
+
+    'ca-ES': {
+      appName:'Mania dels Nombres', progressBtn:'El meu progrés', resetBtn:'Esborra el progrés',
+      headerRung:(icon,r,total,best)=>`${icon} Graó ${r} de ${total} — millor ${best}`,
+      headerLevel:n=>`Nivell: ${n}`,
+
+      voiceLangTitle:name=>`Idioma de la veu: ${name} — toca per canviar`,
+      voiceLangLabel:name=>`Idioma de la veu: ${name}`,
+      fullscreen:'Pantalla completa', exitFullscreen:'Surt de pantalla completa',
+
+      keypadLabel:'Teclat numèric', send:'Envia', deleteDigit:'Esborra l\'últim dígit',
+      unitsFirstOn:'⇠ Unitats primer — SÍ', unitsFirstOff:'⇠ Unitats primer — no',
+
+      homeTitle:'Què practiquem?',
+      homeSubtitle:'Digues la resposta o escriu-la: totes dues maneres funcionen.',
+      bestSoFar:(best,total)=>`Millor marca: graó ${best} de ${total}.`,
+      notStarted:'Encara no has començat.',
+
+      'op.add.name':'Sumes',          'op.add.short':'Suma',
+      'op.sub.name':'Restes',         'op.sub.short':'Resta',
+      'op.mul.name':'Multiplicacions','op.mul.short':'Multiplicació',
+      'op.div.name':'Divisions',      'op.div.short':'Divisió',
+      'op.add.blurb':'Sumar, des d\'1 + 1 fins a portar-ne amb tres xifres.',
+      'op.sub.blurb':'Restar, incloent-hi demanar-ne a la columna del costat.',
+      'op.mul.blurb':'Totes les taules barrejades, fins a coses com 25 × 46.',
+      'op.div.blurb':'Repartir exactament: totes les respostes són nombres enters.',
+
+      ladderName:'Escala amunt',
+      ladderDesc:total=>`${total} graons de dificultat creixent. Si encertes puges, si falles baixes un graó — mai quedes eliminat.`,
+      resumeRung:r=>` Ets al graó ${r}.`,
+      tablesName:'Aventura de taules',
+      tablesDesc:'Tria o gira per una taula i treballa-la des de sumar fins a un test contrarellotge.',
+      allSections:'← Totes les seccions',
+      confirmClimb:r=>`Vols continuar l'escalada al graó ${r}?`,
+      confirmLevel:n=>`Vols continuar al nivell ${n}?`,
+      confirmReset:'Vols esborrar el progrés, els temps i tot el que l\'escala ha après de tu?',
+
+      ladderTitle:(icon,short)=>`${icon} Escala de ${short.toLowerCase()}`,
+      ladderSubtitle:'Encertar puja un graó, fallar en baixa un — mai quedes eliminat.',
+      ready:'A punt?', yourAnswer:'La teva resposta:', heard:'He sentit:',
+      pressStart:'Prem Comença per començar.', pressStartShort:'Prem Comença',
+      start:'Comença', check:'Comprova', menu:'Menú', close:'Tanca', continueBtn:'Continua',
+      rungOf:(r,total)=>`Graó ${r} de ${total}`,
+      'zone.Ground':'Base', 'zone.Lower':'Baixa', 'zone.Middle':'Mitjana',
+      'zone.Upper':'Alta',  'zone.Summit':'Cim',
+
+      sayOrKeypad:'Digues la resposta o fes servir el teclat — compta la primera.',
+      keypadOpen:'Teclat obert — prem Envia quan estiguis a punt.',
+      noNumber:'No he entès cap nombre — torna-ho a dir.',
+      micBusy:'El micròfon està ocupat — fes servir el teclat.',
+      tapKeys:'Prem les tecles i després Envia.',
+      listening:'Escoltant...',
+      troubleHearing:'No t\'he sentit bé. Ho torno a provar...',
+      typedCorrect:v=>`Has escrit ${v}. Correcte!`,
+      heardCorrect:(txt,v)=>`He sentit "${txt}" → ${v}. Correcte!`,
+      heardWrong:(txt,v)=>`He sentit "${txt}"${v===null?'':` → ${v}`} — torna-ho a provar.`,
+      tryAgain:v=>`${v} — torna-ho a provar.`,
+      sayOrType:v=>`Digues o escriu "${v}"`,
+      sayOrTypeMoveOn:v=>`Digues o escriu "${v}" per continuar.`,
+
+      atTheTop:'Ja ets al cim!',
+      correctUpTo:r=>`Correcte — puges al graó ${r}!`,
+      correctIntoZone:z=>`Correcte — entres a la zona ${z}!`,
+      downToRung:r=>`Baixes al graó ${r}.`,
+      stayOnRung1:'Et quedes al graó 1.',
+      summitTitle:short=>`🏔️ Has coronat l'escala de ${short.toLowerCase()}! 🏔️`,
+      summitBody:total=>`Has pujat els ${total} graons.`,
+      summit:'Cim!', climbAgain:'Torna a escalar',
+
+      fastestFinishes:'Temps més ràpids', noTimes:'Encara no hi ha cap temps registrat.',
+      hsEntry:(init,table,secs,date)=>`${init} — taula del ${table} en ${secs}s (${date})`,
+      trickyTitle:'Les que et costen',
+      trickyNone:'Encara res — apareixen quan falles una operació un parell de vegades.',
+      trickyIntro:'Aquestes pugen més amunt a l\'escala perquè te les trobis més sovint.',
+      trickyLine:(label,misses,tries)=>`${label} — fallada ${misses} de ${tries}`,
+      voiceOffTitle:'La veu no està disponible',
+      voiceOffBody:'El navegador necessita reconeixement de veu (prova Chrome o Edge). Igualment pots jugar amb el teclat de la pantalla.',
+
+      chooseTable:'Tria una taula de multiplicar',
+      chooseTableSub:'Comença per on vulguis. Sempre pots girar la ruleta per sorprendre\'t!',
+      selectTable:'Tria una taula per començar.',
+      spinInstead:'Millor gira la ruleta',
+      tableSelected:v=>`Has triat la taula del ${v}`,
+      listenNoTyping:'Escoltarem les teves respostes — o fes servir el teclat.',
+      startPracticing:'Comença a practicar',
+      spinTitle:'Gira per triar una taula',
+      spinSub:'Totes les taules fins al 10 t\'esperen. Toca la ruleta i prepara\'t per dir les respostes!',
+      spinBtn:'Gira la ruleta',
+      tablePicked:p=>`🎉 Taula del ${p}! 🎉`, go:'Som-hi!',
+      practiceAdding:n=>`Practica sumar ${n}`,
+      greatNext:'Molt bé! Ara ve la següent...',
+      fillNext:n=>`Omplim uns quants buits de la taula del ${n}.`,
+      fillTitle:(n,count)=>`Taula del ${n} — omple ${count} buits`,
+      fillSub:'Escriu o digues les respostes que falten.',
+      niceBlank:'Bé! Ara ve el següent buit...',
+      quizTitle:n=>`Taula del ${n} — test contrarellotge`,
+      quizSub:'Digues o escriu cada resposta.',
+      correctNext:'Correcte! Ara ve la següent pregunta...',
+      initialsPrompt:'Escriu les teves inicials per desar el temps:',
+      totalTime:s=>`Temps total: ${s}s`,
+      nextLevel:'Següent nivell',
+      winTitle:'🎉 Has guanyat el joc! 🎉', winBody:'Has completat totes les taules!',
+      congrats:'Felicitats!', congratsBody:'Gran feina dominant les taules.',
+      playAgain:'Torna a jugar',
+      celebrations:["Molt bé!","Ben fet!","Fantàstic!","Ets increïble!",
+                    "Continua així!","Bravo!","Excel·lent!","Ets una estrella!"]
+    }
+  };
+
+  let uiLang = 'en-US';
+
+  function t(key, ...args){
+    const table = STRINGS[uiLang] || STRINGS['en-US'];
+    // Fall back to English for anything a translation has not covered, so a missing
+    // key shows a real sentence rather than a raw identifier.
+    const val = table[key] !== undefined ? table[key] : STRINGS['en-US'][key];
+    if(val === undefined) return key;
+    return typeof val === 'function' ? val(...args) : val;
+  }
+
+  const opName  = op => t('op.' + op.key + '.name');
+  const opShort = op => t('op.' + op.key + '.short');
+  const opBlurb = op => t('op.' + op.key + '.blurb');
+  const zoneName = zone => t('zone.' + zone.name);
+  const celebrate = () => {
+    const list = t('celebrations');
+    return list[Math.floor(Math.random() * list.length)];
+  };
+
+  // Whatever screen is showing, so switching language can redraw it in place.
+  let repaintScreen = null;
 
   let tableStartTime = null;
 
@@ -555,11 +792,11 @@
   function updateHeader(){
     if(state.mode === 'ladder'){
       const op = OPS[state.op] || OPS.mul, l = ladderState(op.key);
-      levelDisplay.textContent = `${op.icon} Rung ${l.rung} of ${LADDER_RUNGS} — best ${l.best}`;
+      levelDisplay.textContent = t('headerRung', op.icon, l.rung, LADDER_RUNGS, l.best);
     } else if(state.mode === 'tables'){
-      levelDisplay.textContent = 'Level: ' + state.level;
+      levelDisplay.textContent = t('headerLevel', state.level);
     } else {
-      levelDisplay.textContent = 'Number Mania';
+      levelDisplay.textContent = t('appName');
     }
     saveState();
   }
@@ -575,35 +812,35 @@
 
   document.getElementById('highScoresBtn').onclick = () => {
     const hs = getHighScores();
-    let html = `<h2>Fastest Finishes</h2><ol>`;
+    let html = `<h2>${t('fastestFinishes')}</h2><ol>`;
     if(!hs.length){
-      html += `<li>No recorded times yet.</li>`;
+      html += `<li>${t('noTimes')}</li>`;
     } else {
-      hs.forEach(e=> html+=`<li>${e.initials} — Table ${e.table} in ${e.timeSeconds}s (${e.date})</li>`);
+      hs.forEach(e => html += `<li>${t('hsEntry', e.initials, e.table, e.timeSeconds, e.date)}</li>`);
     }
     html += `</ol>`;
 
-    html += `<h2>Tricky For You</h2>`;
+    html += `<h2>${t('trickyTitle')}</h2>`;
     const trickyByOp = OP_KEYS
       .map(k => ({ op: OPS[k], list: trickiestFacts(OPS[k], 4) }))
       .filter(x => x.list.length);
     if(!trickyByOp.length){
-      html += `<p>Nothing yet — these appear once you've missed a fact a couple of times.</p>`;
+      html += `<p>${t('trickyNone')}</p>`;
     } else {
-      html += `<p>These are pushed higher up the ladder so you meet them more often.</p>`;
+      html += `<p>${t('trickyIntro')}</p>`;
       trickyByOp.forEach(({ op, list }) => {
-        html += `<p><b>${op.icon} ${op.short}</b></p><ol>`;
-        list.forEach(t => html += `<li>${t.label} — missed ${t.misses} of ${t.attempts}</li>`);
+        html += `<p><b>${op.icon} ${opShort(op)}</b></p><ol>`;
+        list.forEach(f => html += `<li>${t('trickyLine', f.label, f.misses, f.attempts)}</li>`);
         html += `</ol>`;
       });
     }
-    html += `<button id="closeHS">Close</button>`;
+    html += `<button id="closeHS">${t('close')}</button>`;
     showOverlay(html);
     document.getElementById('closeHS').onclick = hideOverlay;
   };
 
   document.getElementById('resetBtn').onclick = () => {
-    if(confirm('Clear progress, recorded times & what the ladder has learned about you?')){
+    if(confirm(t('confirmReset'))){
       clearState();
       localStorage.removeItem(HS_KEY);
       localStorage.removeItem('mulFactStats');
@@ -637,7 +874,7 @@
 
   function requireSpeechRecognition(){
     if(!SpeechRecognition){
-      showOverlay(`<h2>Voice input unavailable</h2><p>Your browser needs speech recognition (try Chrome or Edge). Keyboard play isn't required, but you may need a supported browser.</p>`);
+      showOverlay(`<h2>${t('voiceOffTitle')}</h2><p>${t('voiceOffBody')}</p>`);
       return false;
     }
     return true;
@@ -715,7 +952,7 @@
         if(parseInt(inputEl.value, 10) === expected){
           inputEl.oninput = null;
           const val = parseInt(inputEl.value, 10);
-          statusEl.innerHTML = `<span class="good">Typed ${val}. Correct!</span>`;
+          statusEl.innerHTML = `<span class="good">${t('typedCorrect', val)}</span>`;
           playSfx(audioSuccess);
           setPreferredInput('keypad');
           hideKeypad();
@@ -730,7 +967,7 @@
         if(isNaN(val) || val === expected) return;
         showHeard(val, false);
         onMismatch && onMismatch(val, String(val));
-        statusEl.innerHTML = `<span class="bad">${val} — try again.</span>`;
+        statusEl.innerHTML = `<span class="bad">${t('tryAgain', val)}</span>`;
         inputEl.value = '';
       };
     }
@@ -751,7 +988,7 @@
 
     const startRecognition = () => {
       if(!keepListening) return;
-      statusEl.textContent = 'Listening...';
+      statusEl.textContent = t('listening');
       const rec = new SpeechRecognition();
       activeRecognizer = rec;
       rec.lang = speechLang;
@@ -767,18 +1004,18 @@
           showHeard(val, true);
           setPreferredInput('voice');
           stopListening();
-          statusEl.innerHTML = `<span class="good">Heard "${transcript.trim()}" → ${val}. Correct!</span>`;
+          statusEl.innerHTML = `<span class="good">${t('heardCorrect', transcript.trim(), val)}</span>`;
           playSfx(audioSuccess);
           setTimeout(() => onCorrect(transcript.trim(), val), 600);
         } else {
           showHeard(val, false);
           onMismatch && onMismatch(val, transcript.trim());
-          statusEl.innerHTML = `<span class="bad">Heard "${transcript.trim()}"${isNaN(val)?'':` → ${val}`} — try again.</span>`;
+          statusEl.innerHTML = `<span class="bad">${t('heardWrong', transcript.trim(), isNaN(val) ? null : val)}</span>`;
         }
       };
 
       rec.onerror = () => {
-        statusEl.textContent = 'Had trouble hearing you. Trying again...';
+        statusEl.textContent = t('troubleHearing');
       };
 
       rec.onend = () => {
@@ -792,7 +1029,7 @@
         // See askOnce: a failed start fires no onend, so it must retry itself.
         activeRecognizer = null;
         if(++startFailures <= 8) setTimeout(startRecognition, 300);
-        else statusEl.innerHTML = `<span class="bad">Microphone busy — use the keypad.</span>`;
+        else statusEl.innerHTML = `<span class="bad">${t('micBusy')}</span>`;
       }
     };
 
@@ -820,27 +1057,26 @@
   // The home menu: one card per operation, each showing how far that climb has got.
   function showHomeMenu(){
     stopListening();
+    repaintScreen = showHomeMenu;
     state.mode = null;
     state.op = null;
     updateHeader();
 
     const cards = OP_KEYS.map(k => {
       const op = OPS[k], l = ladderState(k);
-      const progress = l.best > 1
-        ? `Best so far: rung ${l.best} of ${LADDER_RUNGS}.`
-        : 'Not started yet.';
+      const progress = l.best > 1 ? t('bestSoFar', l.best, LADDER_RUNGS) : t('notStarted');
       return `
         <button class="mode-card" data-op="${k}">
           <span class="mode-icon">${op.icon}</span>
-          <span class="mode-name">${op.name}</span>
-          <span class="mode-desc">${op.blurb}<br><b>${progress}</b></span>
+          <span class="mode-name">${opName(op)}</span>
+          <span class="mode-desc">${opBlurb(op)}<br><b>${progress}</b></span>
         </button>`;
     }).join('');
 
     main.innerHTML = `
       <div class="card">
-        <h2>What shall we practise?</h2>
-        <p class="subtitle">Say your answer or tap it in — both work everywhere.</p>
+        <h2>${t('homeTitle')}</h2>
+        <p class="subtitle">${t('homeSubtitle')}</p>
         <div class="mode-grid mode-grid-4">${cards}</div>
       </div>`;
 
@@ -852,38 +1088,39 @@
   // Tables Adventure, whose stages are about times tables specifically.
   function showOperationMenu(op){
     stopListening();
+    repaintScreen = () => showOperationMenu(op);
     state.mode = null;
     state.op = op.key;
     ladderOp = op;
     updateHeader();
 
     const l = ladderState(op.key);
-    const resume = l.rung > 1 ? ` You're on rung ${l.rung}.` : '';
+    const resume = l.rung > 1 ? t('resumeRung', l.rung) : '';
     const tables = op.key === 'mul' ? `
       <button class="mode-card" id="modeTables">
         <span class="mode-icon">🎡</span>
-        <span class="mode-name">Tables Adventure</span>
-        <span class="mode-desc">Pick or spin a single table, then work it from adding up to a timed quiz.</span>
+        <span class="mode-name">${t('tablesName')}</span>
+        <span class="mode-desc">${t('tablesDesc')}</span>
       </button>` : '';
 
     main.innerHTML = `
       <div class="card">
-        <h2>${op.icon} ${op.short}</h2>
-        <p class="subtitle">${op.blurb}</p>
+        <h2>${op.icon} ${opShort(op)}</h2>
+        <p class="subtitle">${opBlurb(op)}</p>
         <div class="mode-grid">
           <button class="mode-card" id="modeLadder">
             <span class="mode-icon">🪜</span>
-            <span class="mode-name">Ladder Climb</span>
-            <span class="mode-desc">${LADDER_RUNGS} rungs of rising difficulty. Right answer climbs, wrong answer drops one — you're never out.${resume}</span>
+            <span class="mode-name">${t('ladderName')}</span>
+            <span class="mode-desc">${t('ladderDesc', LADDER_RUNGS)}${resume}</span>
           </button>
           ${tables}
         </div>
-        <button id="backHome" class="secondary">← All sections</button>
+        <button id="backHome" class="secondary">${t('allSections')}</button>
       </div>`;
 
     document.getElementById('backHome').onclick = showHomeMenu;
     document.getElementById('modeLadder').onclick = () => {
-      if(l.rung > 1 && !confirm(`Continue your climb at rung ${l.rung}?`)) l.rung = 1;
+      if(l.rung > 1 && !confirm(t('confirmClimb', l.rung))) l.rung = 1;
       startLadderMode(op);
     };
     const tablesBtn = document.getElementById('modeTables');
@@ -894,7 +1131,7 @@
     stopListening();
     state.mode = 'tables';
     const hasProgress = state.level>1 || state.currentTable;
-    if(hasProgress && confirm(`Continue at Level ${state.level}?`)){
+    if(hasProgress && confirm(t('confirmLevel', state.level))){
       nextStep();
     } else {
       state.level=1; state.currentTable=null;
@@ -905,13 +1142,14 @@
 
   function pickTable(){
     stopListening();
+    repaintScreen = pickTable;
     main.innerHTML = `
       <div class="card">
-        <h2>Choose a Times Table</h2>
-        <p class="subtitle">Start anywhere you like. You can still spin the wheel for surprises later!</p>
+        <h2>${t('chooseTable')}</h2>
+        <p class="subtitle">${t('chooseTableSub')}</p>
         <div class="table-picker">${Array.from({length:10},(_,i)=>`<button class="table-choice" data-table="${i+1}">${i+1}</button>`).join('')}</div>
-        <div class="voice-status" id="pickStatus">Select a table to begin.</div>
-        <button id="randomTable" class="secondary">Spin the Wheel Instead</button>
+        <div class="voice-status" id="pickStatus">${t('selectTable')}</div>
+        <button id="randomTable" class="secondary">${t('spinInstead')}</button>
       </div>`;
 
     document.querySelectorAll('.table-choice').forEach(btn=>{
@@ -923,10 +1161,10 @@
         tableStartTime = null;
         saveState();
         showOverlay(`
-          <h2>Table of ${val} Selected</h2>
-          <p>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</p>
-          <p>We'll listen for your answers — no typing needed.</p>
-          <button id="startPractice">Start Practicing</button>`);
+          <h2>${t('tableSelected', val)}</h2>
+          <p>${celebrate()}</p>
+          <p>${t('listenNoTyping')}</p>
+          <button id="startPractice">${t('startPracticing')}</button>`);
         document.getElementById('startPractice').onclick = () => {
           hideOverlay();
           startAdditionPractice();
@@ -947,12 +1185,13 @@
   // WHEEL
   function spinWheel(){
     stopListening();
+    repaintScreen = spinWheel;
     main.innerHTML = `
       <div class="card">
-        <h2>Spin to pick a table</h2>
+        <h2>${t('spinTitle')}</h2>
         <canvas id="wheelCanvas" width="360" height="360"></canvas>
-        <p class="subtitle">Every table up to 10 is waiting for you. Tap the wheel and get ready to speak your answers!</p>
-        <button id="spinBtn">Spin the Wheel</button>
+        <p class="subtitle">${t('spinSub')}</p>
+        <button id="spinBtn">${t('spinBtn')}</button>
       </div>`;
     const canvas = document.getElementById('wheelCanvas');
     const ctx    = canvas.getContext('2d');
@@ -990,10 +1229,10 @@
         saveState();
         playSfx(audioLevelUp);
         showOverlay(`
-          <h2>🎉 Table of ${pick}! 🎉</h2>
-          <p>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</p>
-          <p>We'll listen for your answers — no typing needed.</p>
-          <button id="gotable">Go!</button>`);
+          <h2>${t('tablePicked', pick)}</h2>
+          <p>${celebrate()}</p>
+          <p>${t('listenNoTyping')}</p>
+          <button id="gotable">${t('go')}</button>`);
         document.getElementById('gotable').onclick = () => {
           hideOverlay();
           startAdditionPractice();
@@ -1005,17 +1244,19 @@
   // ADDITION PRACTICE
   function startAdditionPractice(){
     stopListening();
+    // Mid-stage: a language switch updates the chrome but must not restart the run.
+    repaintScreen = null;
     const n = state.currentTable;
     let step = 0;
 
     main.innerHTML = `
       <div class="card">
-        <h2>Practice Adding ${n}</h2>
+        <h2>${t('practiceAdding', n)}</h2>
         <div class="question" id="addQ">0 + ${n} = ?</div>
         <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
-        <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="addHeard"></div></div>
-        <div class="voice-status" id="addStatus">Press Start to begin.</div>
-        <button id="addSubmit">Start</button>
+        <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="addHeard"></div></div>
+        <div class="voice-status" id="addStatus">${t('pressStart')}</div>
+        <button id="addSubmit">${t('start')}</button>
       </div>
     `;
 
@@ -1027,23 +1268,23 @@
     const ask = () => {
       const expected = (step+1) * n;
       qEl.textContent = `${step*n} + ${n} = ?`;
-      statusEl.textContent = `Say or type "${expected}" to move on.`;
+      statusEl.textContent = t('sayOrTypeMoveOn', expected);
       listenForNumber(expected, statusEl, () => {
         step++;
         if(step === 10){
           playSfx(audioLevelUp);
           updateHeader();
           showOverlay(`
-            <h2>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-            <p>Let's fill in a few blanks for ${n}.</p>
-            <button id="contFill">Continue</button>`);
+            <h2>${celebrate()}</h2>
+            <p>${t('fillNext', n)}</p>
+            <button id="contFill">${t('continueBtn')}</button>`);
           document.getElementById('contFill').onclick = () => {
             hideOverlay();
             startFillMode();
           };
           return;
         }
-        statusEl.textContent = 'Great! Next one coming up...';
+        statusEl.textContent = t('greatNext');
         setTimeout(ask, 700);
       }, () => {}, document.getElementById('addHeard'), inputEl);
     };
@@ -1059,6 +1300,7 @@
   // FILL-IN (odd levels)
   function startFillMode(){
     stopListening();
+    repaintScreen = null;
     const n = state.currentTable;
     const bmap={1:4,3:4,5:5,7:6,9:7};
     const blankCount = bmap[state.level]||4;
@@ -1068,14 +1310,14 @@
     let idx = 0;
 
     main.innerHTML = `<div class="card">
-      <h2>Table of ${n} — Fill ${blankCount} Blanks</h2>
-      <p class="subtitle">Type or say the missing answers.</p>
-      <div class="question" id="fillQuestion">Ready?</div>
+      <h2>${t('fillTitle', n, blankCount)}</h2>
+      <p class="subtitle">${t('fillSub')}</p>
+      <div class="question" id="fillQuestion">${t('ready')}</div>
       <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
-      <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="fillHeard"></div></div>
-      <div class="voice-status" id="fillStatus">Press Start to begin.</div>
+      <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="fillHeard"></div></div>
+      <div class="voice-status" id="fillStatus">${t('pressStart')}</div>
       <div class="table-preview">${all.map(i=>`<div>${n} × ${i} = ${blanks.includes(i)?'❓':'<strong>'+n*i+'</strong>'}</div>`).join('')}</div>
-      <button id="fillStartBtn">Start</button>
+      <button id="fillStartBtn">${t('start')}</button>
     </div>`;
 
     const statusEl = document.getElementById('fillStatus');
@@ -1086,14 +1328,14 @@
       const i = blanks[idx];
       const expected = n * i;
       qEl.textContent = `${n} × ${i} = ?`;
-      statusEl.textContent = `Say or type "${expected}"`;
+      statusEl.textContent = t('sayOrType', expected);
       listenForNumber(expected, statusEl, () => {
         idx++;
         if(idx >= blanks.length){
           playSfx(audioLevelUp);
           updateHeader();
           showOverlay(`
-            <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
+            <h2>🎉 ${celebrate()}</h2>
             <p>Get ready for a quick voice quiz on ${n}.</p>
             <button id="nextlvl">Continue</button>`);
           document.getElementById('nextlvl').onclick = () => {
@@ -1104,7 +1346,7 @@
           };
           return;
         }
-        statusEl.textContent = 'Nice! Here comes the next blank...';
+        statusEl.textContent = t('niceBlank');
         setTimeout(ask, 700);
       }, () => {}, document.getElementById('fillHeard'), inputEl);
     };
@@ -1120,19 +1362,20 @@
   // QUIZ (even levels)
   function startQuiz(){
     stopListening();
+    repaintScreen = null;
     const n = state.currentTable;
     let qIdx=0;
     const questions = shuffle(Array.from({length:10},(_,i)=>i+1));
 
     main.innerHTML = `
       <div class="card">
-        <h2>Table of ${n} — Challenge Quiz</h2>
-        <p class="subtitle">Say or type each answer.</p>
-        <div id="question" class="question">Press Start</div>
+        <h2>${t('quizTitle', n)}</h2>
+        <p class="subtitle">${t('quizSub')}</p>
+        <div id="question" class="question">${t('pressStartShort')}</div>
         <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
-        <div class="heard-wrapper"><div class="heard-label">Heard:</div><div class="heard-number" id="quizHeard"></div></div>
-        <div class="voice-status" id="quizStatus">Press Start to begin.</div>
-        <button id="submitQ">Start</button>
+        <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="quizHeard"></div></div>
+        <div class="voice-status" id="quizStatus">${t('pressStart')}</div>
+        <button id="submitQ">${t('start')}</button>
       </div>
     `;
 
@@ -1145,7 +1388,7 @@
       const expected = n * questions[qIdx];
       let missedThis = false;
       qEl.textContent = `${n} × ${questions[qIdx]} = ?`;
-      statusEl.textContent = `Say or type "${expected}"`;
+      statusEl.textContent = t('sayOrType', expected);
       listenForNumber(expected, statusEl, () => {
         // One record per question: the quiz retries until correct, so "did they get
         // it first time" is the signal, and it feeds the ladder's personal history.
@@ -1155,13 +1398,13 @@
           const totalTime = Math.round((Date.now() - tableStartTime)/1000);
           playSfx(audioLevelUp);
           updateHeader();
-          const input = prompt('Enter your initials to record your time:', '');
+          const input = prompt(t('initialsPrompt'), '');
           const init  = input ? input.toUpperCase().slice(0,3) : '';
           if(init) saveHighScore(n, totalTime, init);
           showOverlay(`
-            <h2>🎉 ${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</h2>
-            <p>Total Time: ${totalTime}s</p>
-            <button id="nextlvl2">Next Level</button>`);
+            <h2>🎉 ${celebrate()}</h2>
+            <p>${t('totalTime', totalTime)}</p>
+            <button id="nextlvl2">${t('nextLevel')}</button>`);
           document.getElementById('nextlvl2').onclick = () => {
             hideOverlay();
             state.level++;
@@ -1170,7 +1413,7 @@
           };
           return;
         }
-        statusEl.textContent = 'Correct! Next question coming...';
+        statusEl.textContent = t('correctNext');
         setTimeout(ask, 700);
       }, () => { missedThis = true; }, document.getElementById('quizHeard'), inputEl);
     };
@@ -1592,7 +1835,7 @@
     }
 
     if(!SpeechRecognition){
-      statusEl.textContent = 'Tap the keys, then Send.';
+      statusEl.textContent = t('tapKeys');
       if(inputEl) showKeypad(inputEl);   // the only way in, so don't make them ask
       return;
     }
@@ -1613,7 +1856,7 @@
         const val = parseSpokenNumber(transcript);
         // A mis-hear must never cost a rung — only a number we actually parsed counts as an answer.
         if(isNaN(val)){
-          statusEl.innerHTML = `<span class="bad">Didn't catch a number — say it again.</span>`;
+          statusEl.innerHTML = `<span class="bad">${t('noNumber')}</span>`;
           return;
         }
         settle(val, 'spoken');
@@ -1630,7 +1873,7 @@
         // stays dead for the rest of the question.
         activeRecognizer = null;
         if(++startFailures <= 8) setTimeout(startRecognition, 300);
-        else statusEl.innerHTML = `<span class="bad">Microphone busy — use the keypad.</span>`;
+        else statusEl.innerHTML = `<span class="bad">${t('micBusy')}</span>`;
       }
     };
 
@@ -1646,7 +1889,7 @@
       }
     };
 
-    statusEl.textContent = 'Say your answer, or use the keypad — first answer counts.';
+    statusEl.textContent = t('sayOrKeypad');
     startRecognition();
 
     // Open the keypad the way they answered last time. Voice keeps running
@@ -1682,11 +1925,12 @@
     const zone = zoneOf(r);
     document.getElementById('ladderRail').innerHTML = ladderRailHtml(r, l.best);
     document.getElementById('rungBadge').innerHTML =
-      `<span class="zone-tag ${zone.cls}">${zone.name}</span>Rung ${r} of ${LADDER_RUNGS}`;
+      `<span class="zone-tag ${zone.cls}">${zoneName(zone)}</span>${t('rungOf', r, LADDER_RUNGS)}`;
   }
 
   function startLadderMode(op){
     stopListening();
+    repaintScreen = () => startLadderMode(op);
     ladderOp = op;
     state.mode = 'ladder';
     state.op = op.key;
@@ -1696,18 +1940,18 @@
 
     main.innerHTML = `
       <div class="card">
-        <h2>${op.icon} ${op.short} Ladder</h2>
-        <p class="subtitle">Right climbs a rung, wrong drops one — you're never knocked out.</p>
+        <h2>${t('ladderTitle', op.icon, opShort(op))}</h2>
+        <p class="subtitle">${t('ladderSubtitle')}</p>
         <div class="ladder-layout">
           <div class="ladder-rail" id="ladderRail"></div>
           <div class="ladder-play">
             <div class="rung-badge" id="rungBadge"></div>
-            <div class="question" id="ladderQ">Ready?</div>
+            <div class="question" id="ladderQ">${t('ready')}</div>
             <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
-            <div class="heard-wrapper"><div class="heard-label">Your answer:</div><div class="heard-number" id="ladderHeard"></div></div>
-            <div class="voice-status" id="ladderStatus">Press Start to begin.</div>
-            <button id="ladderSubmit">Check</button>
-            <button id="ladderMenu" class="secondary">Menu</button>
+            <div class="heard-wrapper"><div class="heard-label">${t('yourAnswer')}</div><div class="heard-number" id="ladderHeard"></div></div>
+            <div class="voice-status" id="ladderStatus">${t('pressStart')}</div>
+            <button id="ladderSubmit">${t('check')}</button>
+            <button id="ladderMenu" class="secondary">${t('menu')}</button>
           </div>
         </div>
       </div>`;
@@ -1717,7 +1961,7 @@
     updateHeader();
 
     const startBtn = document.getElementById('ladderSubmit');
-    startBtn.textContent = 'Start';
+    startBtn.textContent = t('start');
     startBtn.onclick = () => askLadderQuestion(op);
     document.getElementById('answerInput').disabled = true;
   }
@@ -1736,7 +1980,7 @@
     paintRung(op, r);
     document.getElementById('ladderQ').textContent = `${op.render(a, b)} = ?`;
     heardEl.classList.remove('visible','correct','incorrect');
-    submitEl.textContent = 'Check';
+    submitEl.textContent = t('check');
     updateHeader();
 
     askOnce(expected, statusEl, heardEl, inputEl, submitEl, correct => {
@@ -1746,7 +1990,7 @@
         if(r >= LADDER_RUNGS){
           l.best = LADDER_RUNGS;
           saveState();
-          statusEl.innerHTML = `<span class="good">That's the top!</span>`;
+          statusEl.innerHTML = `<span class="good">${t('atTheTop')}</span>`;
           setTimeout(() => ladderSummit(op), 900);
           return;
         }
@@ -1759,15 +2003,15 @@
         const newBest = l.rung > previousBest;
         playSfx(climbedZone || newBest ? audioLevelUp : audioSuccess);
         statusEl.innerHTML = climbedZone
-          ? `<span class="good">Correct — into the ${zoneOf(l.rung).name} zone!</span>`
-          : `<span class="good">Correct — up to rung ${l.rung}!</span>`;
+          ? `<span class="good">${t('correctIntoZone', zoneName(zoneOf(l.rung)))}</span>`
+          : `<span class="good">${t('correctUpTo', l.rung)}</span>`;
         paintRung(op, l.rung);
         setTimeout(() => askLadderQuestion(op), climbedZone ? 1200 : 900);
       } else {
         playSfx(audioFail);
         l.rung = Math.max(1, r - 1);
         saveState();
-        const where = r > 1 ? `Down to rung ${l.rung}.` : 'You stay on rung 1.';
+        const where = r > 1 ? t('downToRung', l.rung) : t('stayOnRung1');
         statusEl.innerHTML = `<span class="bad">${op.render(a, b)} = ${expected}.</span> ${where}`;
         paintRung(op, l.rung);
         setTimeout(() => askLadderQuestion(op), 2400);   // let the fall land, it's the teaching moment
@@ -1778,16 +2022,17 @@
   function ladderSummit(op){
     stopListening();
     playSfx(audioLevelUp);
+    repaintScreen = () => ladderSummit(op);
     main.innerHTML = `<div class="card">
-      <h2>🏔️ You topped the ${op.short} ladder! 🏔️</h2>
-      <p>All ${LADDER_RUNGS} rungs climbed.</p>
+      <h2>${t('summitTitle', opShort(op))}</h2>
+      <p>${t('summitBody', LADDER_RUNGS)}</p>
     </div>`;
     setTimeout(() => {
       showOverlay(`
-        <h2>Summit!</h2>
-        <p>${CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]}</p>
-        <button id="climbAgain">Climb Again</button>
-        <button id="summitMenu" class="secondary">Menu</button>`);
+        <h2>${t('summit')}</h2>
+        <p>${celebrate()}</p>
+        <button id="climbAgain">${t('climbAgain')}</button>
+        <button id="summitMenu" class="secondary">${t('menu')}</button>`);
       document.getElementById('climbAgain').onclick = () => {
         hideOverlay();
         ladderState(op.key).rung = 1;
@@ -1805,15 +2050,16 @@
   // WIN
   function winGame(){
     stopListening();
+    repaintScreen = null;
     audioCountdown.pause();
     playSfx(audioSuccess);
-    main.innerHTML = `<div class="card"><h2>🎉 You Won the Game! 🎉</h2>
-      <p>You finished all the tables!</p></div>`;
+    main.innerHTML = `<div class="card"><h2>${t('winTitle')}</h2>
+      <p>${t('winBody')}</p></div>`;
     setTimeout(()=>{
       showOverlay(`
-        <h2>Congratulations!</h2>
-        <p>Great work mastering your tables.</p>
-        <button id="replay2">Play Again</button>`);
+        <h2>${t('congrats')}</h2>
+        <p>${t('congratsBody')}</p>
+        <button id="replay2">${t('playAgain')}</button>`);
       document.getElementById('replay2').onclick = () => {
         audioCountdown.currentTime = 0;
         hideOverlay();
@@ -1834,12 +2080,29 @@
   // ================= VOICE LANGUAGE =================
   const langBtn = document.getElementById('langBtn');
 
-  function setSpeechLang(code, remember){
+  // Chrome that lives outside main and so is never redrawn by a screen.
+  function applyStaticStrings(){
+    document.getElementById('highScoresBtn').textContent = t('progressBtn');
+    document.getElementById('resetBtn').textContent = t('resetBtn');
+    keypad.setAttribute('aria-label', t('keypadLabel'));
+    const sendKey = keypad.querySelector('.key-send');
+    if(sendKey) sendKey.textContent = t('send');
+    const backKey = keypad.querySelector('[data-key="back"]');
+    if(backKey) backKey.setAttribute('aria-label', t('deleteDigit'));
+    setUnitsFirst(unitsFirst, false);          // relabels the units-first key
+    setFocusMode(document.body.classList.contains('focus-mode'), false);
+  }
+
+  function setSpeechLang(code, remember, repaint){
     const lang = LANGUAGES.find(l => l.code === code) || LANGUAGES[0];
     speechLang = lang.code;
+    // One setting: answering in Catalan should mean reading Catalan.
+    uiLang = lang.code;
     langBtn.textContent = '🎤 ' + lang.label;
-    langBtn.setAttribute('aria-label', 'Voice language: ' + lang.name);
-    langBtn.title = 'Voice language: ' + lang.name + ' — tap to switch';
+    langBtn.setAttribute('aria-label', t('voiceLangLabel', lang.name));
+    langBtn.title = t('voiceLangTitle', lang.name);
+    applyStaticStrings();
+    if(repaint && repaintScreen) repaintScreen();
     if(remember){
       const store = storage();
       if(store) try { store.setItem(LANG_KEY, lang.code); } catch(_) {}
@@ -1848,7 +2111,7 @@
 
   langBtn.onclick = () => {
     const next = LANGUAGES[(LANGUAGES.findIndex(l => l.code === speechLang) + 1) % LANGUAGES.length];
-    setSpeechLang(next.code, true);
+    setSpeechLang(next.code, true, true);
     // A recognizer already running is locked to the old language, so cycle it.
     if(voiceControl) voiceControl.restart();
   };
@@ -1884,7 +2147,7 @@
     const btn = keypad.querySelector('.key-reverse');
     if(btn){
       btn.classList.toggle('on', unitsFirst);
-      btn.textContent = unitsFirst ? '⇠ Units first — ON' : '⇠ Units first — off';
+      btn.textContent = t(unitsFirst ? 'unitsFirstOn' : 'unitsFirstOff');
       btn.setAttribute('aria-pressed', unitsFirst ? 'true' : 'false');
     }
     document.querySelectorAll('.answer-input').forEach(el =>
@@ -1988,7 +2251,7 @@
   function setFocusMode(on, remember){
     document.body.classList.toggle('focus-mode', on);
     focusBtn.textContent = on ? '✕' : '⛶';
-    focusBtn.title = on ? 'Exit fullscreen' : 'Fullscreen';
+    focusBtn.title = t(on ? 'exitFullscreen' : 'fullscreen');
     focusBtn.setAttribute('aria-label', focusBtn.title);
     if(remember){
       const store = storage();
@@ -2032,9 +2295,9 @@
       savedInput   = store.getItem(INPUT_KEY);
       savedReverse = store.getItem(REVERSE_KEY);
     } catch(_) {}
-    setFocusMode(savedFocus === '1', false);
-    setSpeechLang(savedLang || 'en-US', false);
     setUnitsFirst(savedReverse === '1', false);
+    setFocusMode(savedFocus === '1', false);
+    setSpeechLang(savedLang || 'en-US', false, false);
     if(savedInput === 'keypad' || savedInput === 'voice') preferredInput = savedInput;
   })();
 
