@@ -349,6 +349,14 @@
       box-shadow: none;
     }
 
+    /* Muted is a state worth seeing at a glance, not a subtle icon swap */
+    .floating-btn.muted {
+      opacity: 1;
+      background: #c0392b;
+    }
+
+    .floating-btn.muted:hover { background: #d0483a; }
+
     /* ON-SCREEN KEYPAD */
     .keypad {
       position: fixed;
@@ -436,7 +444,8 @@
 <body>
 
 <div class="floating-controls">
-  <button id="langBtn" class="floating-btn" type="button" title="Voice language" aria-label="Voice language: English">🎤 EN</button>
+  <button id="micBtn" class="floating-btn" type="button" title="Mute the microphone" aria-label="Mute the microphone" aria-pressed="false">🎤</button>
+  <button id="langBtn" class="floating-btn" type="button" title="Language" aria-label="Language: English">🌐 EN</button>
   <button id="focusBtn" class="floating-btn" type="button" title="Fullscreen" aria-label="Enter fullscreen">⛶</button>
 </div>
 
@@ -491,6 +500,12 @@
   const LANG_KEY = 'mulSpeechLang';
   let speechLang = 'en-US';
 
+  // Muting is a deliberate choice, so everywhere it applies the game falls back to
+  // the keypad quietly rather than complaining that voice is unavailable.
+  const MIC_KEY = 'mulMicMuted';
+  let micMuted = false;
+  const voiceAvailable = () => !!SpeechRecognition && !micMuted;
+
   // How the player answered last time, so the next question opens the same way
   // instead of making them reach for the keypad again on every single question.
   const INPUT_KEY = 'mulInputMode';
@@ -518,9 +533,11 @@
       headerRung:(icon,r,total,best)=>`${icon} Rung ${r} of ${total} — best ${best}`,
       headerLevel:n=>`Level: ${n}`,
 
-      voiceLangTitle:name=>`Voice language: ${name} — tap to switch`,
-      voiceLangLabel:name=>`Voice language: ${name}`,
+      voiceLangTitle:name=>`Language: ${name} — tap to switch`,
+      voiceLangLabel:name=>`Language: ${name}`,
       fullscreen:'Fullscreen', exitFullscreen:'Exit fullscreen',
+      micMute:'Mute the microphone', micUnmute:'Turn the microphone back on',
+      micOffStatus:'Microphone off — use the keypad.',
 
       keypadLabel:'Number keypad', send:'Send', deleteDigit:'Delete last digit',
       unitsFirstOn:'⇠ Units first — ON', unitsFirstOff:'⇠ Units first — off',
@@ -625,9 +642,11 @@
       headerRung:(icon,r,total,best)=>`${icon} Graó ${r} de ${total} — millor ${best}`,
       headerLevel:n=>`Nivell: ${n}`,
 
-      voiceLangTitle:name=>`Idioma de la veu: ${name} — toca per canviar`,
-      voiceLangLabel:name=>`Idioma de la veu: ${name}`,
+      voiceLangTitle:name=>`Idioma: ${name} — toca per canviar`,
+      voiceLangLabel:name=>`Idioma: ${name}`,
       fullscreen:'Pantalla completa', exitFullscreen:'Surt de pantalla completa',
+      micMute:'Silencia el micròfon', micUnmute:'Torna a activar el micròfon',
+      micOffStatus:'Micròfon apagat — fes servir el teclat.',
 
       keypadLabel:'Teclat numèric', send:'Envia', deleteDigit:'Esborra l\'últim dígit',
       unitsFirstOn:'⇠ Unitats primer — SÍ', unitsFirstOff:'⇠ Unitats primer — no',
@@ -940,7 +959,9 @@
   }
 
   function listenForNumber(expected, statusEl, onCorrect, onMismatch, heardEl, inputEl){
-    if(!requireSpeechRecognition()) return;
+    // A muted mic is a choice and falls through to the keypad; a browser with no
+    // speech at all still gets told why.
+    if(!micMuted && !requireSpeechRecognition()) return;
     stopListening();
     keepListening = true;
 
@@ -1036,13 +1057,21 @@
     voiceControl = {
       restart(){
         stopRecognizer();
+        if(!voiceAvailable()) return;
         keepListening = true;
         startFailures = 0;
         setTimeout(startRecognition, 120);
       }
     };
 
-    startRecognition();
+    if(voiceAvailable()){
+      startRecognition();
+    } else {
+      keepListening = false;
+      statusEl.textContent = t('micOffStatus');
+      if(inputEl) showKeypad(inputEl);   // the only way in while the mic is off
+      return;
+    }
     // Carry the last question's choice into this one; voice stays live regardless.
     if(preferredInput === 'keypad' && inputEl) showKeypad(inputEl);
   }
@@ -1834,8 +1863,8 @@
       submitBtn.onclick = commitTyped;
     }
 
-    if(!SpeechRecognition){
-      statusEl.textContent = t('tapKeys');
+    if(!voiceAvailable()){
+      statusEl.textContent = t(micMuted ? 'micOffStatus' : 'tapKeys');
       if(inputEl) showKeypad(inputEl);   // the only way in, so don't make them ask
       return;
     }
@@ -1878,13 +1907,15 @@
     };
 
     voiceControl = {
-      // Only the language switch needs this: a running recognizer is locked to the
-      // language it started with. The keypad no longer stops the microphone.
+      // The language switch and unmuting need this: a running recognizer is locked
+      // to the language it started with. The keypad never stops the microphone.
       restart(){
         if(settled) return;
         stopRecognizer();
+        if(!voiceAvailable()) return;
         keepListening = true;
         startFailures = 0;
+        statusEl.textContent = t('sayOrKeypad');
         setTimeout(startRecognition, 120);
       }
     };
@@ -2080,8 +2111,37 @@
   // ================= VOICE LANGUAGE =================
   const langBtn = document.getElementById('langBtn');
 
+  const micBtn = document.getElementById('micBtn');
+
+  function setMicMuted(on, remember){
+    micMuted = !!on;
+    micBtn.textContent = micMuted ? '🔇' : '🎤';
+    micBtn.classList.toggle('muted', micMuted);
+    micBtn.title = t(micMuted ? 'micUnmute' : 'micMute');
+    micBtn.setAttribute('aria-label', micBtn.title);
+    micBtn.setAttribute('aria-pressed', micMuted ? 'true' : 'false');
+    if(remember){
+      const store = storage();
+      if(store) try { store.setItem(MIC_KEY, micMuted ? '1' : '0'); } catch(_) {}
+    }
+  }
+
+  micBtn.onclick = () => {
+    setMicMuted(!micMuted, true);
+    if(micMuted){
+      stopRecognizer();                       // silence it without ending the question
+      const input = document.querySelector('.answer-input:not([disabled])');
+      if(input) showKeypad(input);            // the only way in now, so open it
+      const status = document.querySelector('.voice-status');
+      if(status) status.textContent = t('micOffStatus');
+    } else if(voiceControl){
+      voiceControl.restart();
+    }
+  };
+
   // Chrome that lives outside main and so is never redrawn by a screen.
   function applyStaticStrings(){
+    setMicMuted(micMuted, false);             // relabels in the current language
     document.getElementById('highScoresBtn').textContent = t('progressBtn');
     document.getElementById('resetBtn').textContent = t('resetBtn');
     keypad.setAttribute('aria-label', t('keypadLabel'));
@@ -2288,13 +2348,15 @@
   // can't be restored without a fresh gesture, so only the layout comes back.
   (() => {
     const store = storage();
-    let savedFocus = null, savedLang = null, savedInput = null, savedReverse = null;
+    let savedFocus = null, savedLang = null, savedInput = null, savedReverse = null, savedMic = null;
     if(store) try {
       savedFocus   = store.getItem(FOCUS_KEY);
       savedLang    = store.getItem(LANG_KEY);
       savedInput   = store.getItem(INPUT_KEY);
       savedReverse = store.getItem(REVERSE_KEY);
+      savedMic     = store.getItem(MIC_KEY);
     } catch(_) {}
+    micMuted = savedMic === '1';
     setUnitsFirst(savedReverse === '1', false);
     setFocusMode(savedFocus === '1', false);
     setSpeechLang(savedLang || 'en-US', false, false);
