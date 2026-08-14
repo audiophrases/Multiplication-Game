@@ -927,37 +927,64 @@
   };
 
   // "i" joins tens to units in Catalan (vint-i-un); "and" does the same in English.
-  const NUMBER_JOINERS = new Set(['i', 'and', 'y']);
+  // "number" and "número" are here so a child may say "number twenty four" for the
+  // extra context it gives the recogniser, without the prefix being required.
+  const NUMBER_JOINERS = new Set(['i', 'and', 'y', 'number', 'numero', 'número', 'nombre']);
 
   function parseSpokenNumber(text, lang){
     if(!text) return NaN;
-    const cleaned = text.toLowerCase();
-    const digitMatch = cleaned.match(/\d+/);
-    if(digitMatch) return parseInt(digitMatch[0], 10);
-
     const map = NUMBER_WORDS[lang || speechLang] || NUMBER_WORDS['en-US'];
-    // Hyphens split like spaces so "vint-i-dos" and "twenty-two" both work.
-    const words = cleaned
-      .replace(/[^a-zàèéíòóúïüç\s-]/g, ' ')
+
+    // Digits and words are tokenised together. Chrome regularly returns a mixture —
+    // "20 for" for twenty four, "fifty 6" for fifty six — and reading only the first
+    // digit run, as this used to, threw away the rest of the answer.
+    const tokens = text.toLowerCase()
+      .replace(/[^0-9a-zàèéíòóúïüç\s-]/g, ' ')
       .split(/[\s-]+/)
       .filter(Boolean);
 
-    let total = 0, current = 0, found = false;
-    words.forEach(w => {
-      if(NUMBER_JOINERS.has(w)) return;
-      const val = map[w];
-      if(val === undefined) return;
-      found = true;
+    const values = [];
+    tokens.forEach(tok => {
+      if(NUMBER_JOINERS.has(tok)) return;
+      if(/^\d+$/.test(tok)){ values.push(parseInt(tok, 10)); return; }
+      const val = map[tok];
+      if(val !== undefined) values.push(val);
+    });
+    if(!values.length) return NaN;
+
+    // Several single digits in a row are the answer being spelled out — "1 5" and
+    // "two four" mean 15 and 24, not 6. Anything larger is being said as a number,
+    // so it accumulates: "20 for" and "fifty 6" are 24 and 56.
+    if(values.length > 1 && values.every(v => v >= 0 && v <= 9)){
+      return parseInt(values.join(''), 10);
+    }
+
+    let total = 0, current = 0;
+    values.forEach(val => {
       if(val === 1000){
         total += Math.max(1, current) * 1000;   // "tres mil" / "three thousand"
         current = 0;
       } else if(val === 100){
         current = Math.max(1, current) * 100;   // "dos-cents" / "two hundred"
+      } else if(val >= 1000){
+        total += val;                           // already a whole number, e.g. "1150"
       } else {
         current += val;
       }
     });
-    return found ? total + current : NaN;
+    return total + current;
+  }
+
+  // True when any hypothesis the recogniser offered reads as the expected answer.
+  // Only ever used to accept, never to reject, so a lucky alternative can rescue a
+  // correct answer but no alternative can mark a wrong one right.
+  function matchesExpected(results, expected){
+    return results.some(res => {
+      for(let i = 0; i < res.length; i++){
+        if(parseSpokenNumber(res[i].transcript) === expected) return true;
+      }
+      return false;
+    });
   }
 
   function listenForNumber(expected, statusEl, onCorrect, onMismatch, heardEl, inputEl){
@@ -1018,7 +1045,7 @@
       // See askOnce: interim results are what make this feel immediate instead of
       // waiting on Chrome's end-of-speech detection.
       rec.interimResults = true;
-      rec.maxAlternatives = 1;
+      rec.maxAlternatives = 5;   // see askOnce: a homophone often ranks above the number
       rec.continuous = false;
 
       rec.onresult = (e) => {
@@ -1029,14 +1056,16 @@
 
         // A matching interim is accepted straight away; a wrong one waits for the
         // final, so a half-heard answer never gets called wrong.
-        if(val === expected){
+        if(val === expected || matchesExpected(results, expected)){
           if(inputEl) inputEl.oninput = null;
-          showHeard(val, true);
+          // Report the expected value, not the top guess: when a lower-ranked
+          // alternative is what matched, the top guess is the wrong word.
+          showHeard(expected, true);
           setPreferredInput('voice');
           stopListening();
-          statusEl.innerHTML = `<span class="good">${t('heardCorrect', transcript.trim(), val)}</span>`;
+          statusEl.innerHTML = `<span class="good">${t('heardCorrect', transcript.trim(), expected)}</span>`;
           playSfx(audioSuccess);
-          setTimeout(() => onCorrect(transcript.trim(), val), 600);
+          setTimeout(() => onCorrect(transcript.trim(), expected), 600);
           return;
         }
         if(!isFinal){
@@ -1888,13 +1917,7 @@
       submitBtn.onclick = commitTyped;
     }
 
-    if(!voiceAvailable()){
-      statusEl.textContent = t(micMuted ? 'micOffStatus' : 'tapKeys');
-      if(inputEl) showKeypad(inputEl);   // the only way in, so don't make them ask
-      return;
-    }
-
-    keepListening = true;
+    keepListening = false;
     let startFailures = 0;
     const startRecognition = () => {
       if(!keepListening || settled) return;
@@ -1905,7 +1928,10 @@
       // speaking and waiting for Chrome to decide the utterance ended, finalise it,
       // and only then hand it over — which is most of the delay people feel.
       rec.interimResults = true;
-      rec.maxAlternatives = 1;
+      // Chrome's top guess for an isolated number is often a homophone while its
+      // second or third is the number itself. Asking for several and accepting any
+      // that reads as the right answer costs the child nothing.
+      rec.maxAlternatives = 5;
       rec.continuous = false;
 
       rec.onresult = e => {
@@ -1918,7 +1944,10 @@
         // answer is safe: the recogniser is telling us they said it. An interim
         // that reads as a wrong one may still be refined, so it waits for the
         // final — a mis-hear must never cost a rung.
-        if(val === expected){ settle(val, 'spoken'); return; }
+        if(val === expected || matchesExpected(results, expected)){
+          settle(expected, 'spoken');
+          return;
+        }
 
         if(!isFinal){
           if(!isNaN(val)) showProvisional(val);
@@ -1960,6 +1989,16 @@
       }
     };
 
+    // Armed before the availability check below, so that a question started while
+    // the mic is muted still has a handle for unmuting to bring voice back. Without
+    // that, muting and unmuting left the microphone dead for the whole question.
+    if(!voiceAvailable()){
+      statusEl.textContent = t(micMuted ? 'micOffStatus' : 'tapKeys');
+      if(inputEl) showKeypad(inputEl);   // the only way in, so don't make them ask
+      return;
+    }
+
+    keepListening = true;
     statusEl.textContent = t('sayOrKeypad');
     startRecognition();
 

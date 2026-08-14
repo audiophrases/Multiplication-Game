@@ -86,6 +86,13 @@ Interim results are accepted **asymmetrically**, because this game scores one sh
 
 The effect is that correct answers land instantly and wrong ones get the recogniser's full, best attempt. Meanwhile the number being heard is shown greyed out as a provisional guess, so the child can see it is listening.
 
+Two more things help with numbers specifically, which recognisers handle badly in isolation:
+
+- **Digits and words are parsed together.** Chrome routinely returns a mixture for one number — `20 for` for twenty four, `fifty 6` for fifty six, `1 5` for fifteen. Several single digits in a row are read as the answer spelled out (`1 5` → 15); anything larger accumulates (`20 for` → 24).
+- **Several hypotheses are considered.** `maxAlternatives` is 5, and if *any* of them reads as the expected answer it is accepted. Chrome's top guess for an isolated number is often a homophone while its second is the number itself. This is only ever used to accept, never to reject, so a lucky alternative can rescue a correct answer but none can mark a wrong one right.
+
+Saying **"number twenty four"** also works — the word is ignored by the parser — so the extra context is available to anyone who wants it without being required.
+
 ## Translations
 
 Every interface string lives in `STRINGS` in `index.html`, keyed by language. Values are either plain strings or **functions of whatever the sentence needs**, so word order stays the translator's business rather than being fixed by concatenation at the call site:
