@@ -11,7 +11,8 @@ function loadModel(){
   if(start === -1 || end === -1) throw new Error('difficulty model markers not found in index.html');
   const src = html.slice(start, end);
   return new Function(`${src}
-    return { MUL_ORDER, ADD_ORDER, OPS, OP_KEYS, factScore, addFactScore, multiScore,
+    return { MUL_ORDER, ADD_ORDER, OPS, OP_KEYS, MENU_KEYS, factScore, addFactScore, multiScore,
+             mixWeights, pickMixOperation, mixSourceRung, nextQuestion, MIX_FLOOR_RUNG,
              addWideScore, addCarryCount, difficulty, rungCenter, rungHalfWidth, rungWindow,
              rungPool, pickQuestion, zoneOf, LADDER_RUNGS, SHAPES,
              stats, recordAnswer, personalShift, personalDifficulty, trickiestFacts,
@@ -225,6 +226,114 @@ describe('inverse operations track their base fact', () => {
       expect(M.OPS.sub.answer(a, b)).toBe(a);
       expect(a + b - b).toBe(a);
     });
+  });
+});
+
+describe('the mixed ladder', () => {
+  const mix = () => M.OPS.mix;
+  const share = r => {
+    const w = M.mixWeights(r);
+    const total = w.reduce((s, x) => s + x.w, 0);
+    return Object.fromEntries(w.map(x => [x.key, x.w / total]));
+  };
+
+  test('it is offered on the menu but is not one of the real operations', () => {
+    expect(M.MENU_KEYS).toContain('mix');
+    expect(M.OP_KEYS).not.toContain('mix');
+    expect(mix().mixed).toBe(true);
+  });
+
+  test('sums lead, then subtractions, then multiplication, then division', () => {
+    const bottom = share(1), top = share(30);
+    // At the bottom addition dominates; at the top division does.
+    expect(bottom.add).toBeGreaterThan(bottom.sub);
+    expect(bottom.sub).toBeGreaterThan(bottom.mul);
+    expect(bottom.mul).toBeGreaterThan(bottom.div);
+    expect(top.div).toBeGreaterThan(top.mul);
+    expect(top.mul).toBeGreaterThan(top.sub);
+    expect(top.sub).toBeGreaterThan(top.add);
+  });
+
+  test('each operation peaks in its own stretch of the climb', () => {
+    const peak = key => {
+      let best = 1, bestShare = -1;
+      for(let r = 1; r <= M.LADDER_RUNGS; r++){
+        const s = share(r)[key];
+        if(s > bestShare){ bestShare = s; best = r; }
+      }
+      return best;
+    };
+    expect(peak('add')).toBeLessThan(peak('sub'));
+    expect(peak('sub')).toBeLessThan(peak('mul'));
+    expect(peak('mul')).toBeLessThan(peak('div'));
+  });
+
+  test('every operation keeps a chance on every rung, so the order is not four blocks', () => {
+    for(let r = 1; r <= M.LADDER_RUNGS; r++){
+      const s = share(r);
+      M.OP_KEYS.forEach(k => expect(s[k]).toBeGreaterThan(0.02));
+    }
+  });
+
+  test('it starts partway up the single-operation ladders', () => {
+    expect(M.mixSourceRung(1)).toBe(M.MIX_FLOOR_RUNG);
+    expect(M.mixSourceRung(1)).toBeGreaterThan(1);
+    expect(M.mixSourceRung(M.LADDER_RUNGS)).toBe(M.LADDER_RUNGS);
+    for(let r = 2; r <= M.LADDER_RUNGS; r++){
+      expect(M.mixSourceRung(r)).toBeGreaterThanOrEqual(M.mixSourceRung(r - 1));
+    }
+  });
+
+  test('it never opens with a beginner fact like 1 + 2 or 1 x 5', () => {
+    const source = M.mixSourceRung(1);
+    M.OP_KEYS.forEach(key => {
+      const op = M.OPS[key];
+      const [lo, hi] = M.rungWindow(op, source);
+      M.rungPool(op, source)
+        .filter(([, , d]) => d >= lo && d <= hi)
+        .forEach(([a, b]) => {
+          expect(a).not.toBe(1);
+          expect(b).not.toBe(1);
+        });
+    });
+  });
+
+  test('a question always carries a real operation, never the mix itself', () => {
+    for(let r = 1; r <= M.LADDER_RUNGS; r++){
+      for(let i = 0; i < 8; i++){
+        const q = M.nextQuestion(mix(), r);
+        expect(M.OP_KEYS).toContain(q.op.key);
+        expect(q.op.mixed).toBeUndefined();
+      }
+    }
+  });
+
+  test('every question it can ask has a whole, non-negative answer', () => {
+    for(let r = 1; r <= M.LADDER_RUNGS; r++){
+      for(let i = 0; i < 20; i++){
+        const { op, a, b } = M.nextQuestion(mix(), r);
+        const answer = op.answer(a, b);
+        expect(Number.isInteger(answer)).toBe(true);
+        expect(answer).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  test('a single-operation ladder is unaffected by nextQuestion', () => {
+    const q = M.nextQuestion(M.OPS.mul, 12);
+    expect(q.op).toBe(M.OPS.mul);
+    const [lo, hi] = M.rungWindow(M.OPS.mul, 12);
+    const d = M.difficulty(M.OPS.mul, q.a, q.b);
+    expect(d).toBeGreaterThanOrEqual(lo);
+    expect(d).toBeLessThanOrEqual(hi);
+  });
+
+  test('over a climb it actually serves all four operations', () => {
+    const seen = new Set();
+    for(let r = 1; r <= M.LADDER_RUNGS; r++){
+      for(let i = 0; i < 40; i++) seen.add(M.nextQuestion(mix(), r).op.key);
+    }
+    expect([...seen].sort()).toEqual(['add', 'div', 'mul', 'sub']);
   });
 });
 

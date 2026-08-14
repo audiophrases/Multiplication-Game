@@ -8,6 +8,8 @@ A small web-based game for practising arithmetic — **sums, subtractions, multi
 
 2. The home menu offers four sections. Each one has its own **Ladder Climb**: 30 rungs of rising difficulty, where a right answer climbs a rung and a wrong answer drops one. You are never eliminated, only slowed down. Each section keeps its own rung, its own best climb and its own record of what you find hard.
 
+   A fifth section, **Everything**, mixes all four in one climb — see below.
+
    Multiplication additionally keeps **Tables Adventure** — choose or spin for a single table, then work it from adding up through fill-in-the-blanks to a timed quiz. Its stages are about times tables specifically, so it stays where it belongs.
 
 3. Each challenge begins when you press its **Start** button. Answers can be spoken or typed.
@@ -39,6 +41,22 @@ Every question in every section is generated from a single base pair `(a, b)`:
 So the inverses derive from the operations they undo, rather than needing orderings of their own. That is not a shortcut — **undoing a fact is the same fact**, and a subtraction needs a borrow in precisely the columns its addition carried. Division is always exact, and subtraction never goes negative, by construction.
 
 Each inverse carries a small offset, because recalling a fact backwards is harder than recalling it forwards.
+
+### The mixed ladder
+
+**Everything** owns no difficulty model of its own. It borrows each question from one of the four ladders above, so every question it asks is already calibrated by the ladder it came from — and the answer is recorded against *that* operation's history, so practice here feeds the single-operation ladders too.
+
+Which operation it draws from shifts as you climb. Each has a centre of prominence — sums at the bottom, then subtractions, then multiplication, with division at the top — and a floor chance everywhere else, so the order is a tendency rather than four blocks in a row:
+
+| Rung | + | − | × | ÷ |
+| --- | --- | --- | --- | --- |
+| 1 | 57% | 30% | 8% | 5% |
+| 8 | 34% | 44% | 17% | 5% |
+| 16 | 11% | 37% | 38% | 13% |
+| 24 | 5% | 16% | 43% | 36% |
+| 30 | 5% | 8% | 31% | 55% |
+
+It is deliberately **not a first climb**. Its rung 1 draws from rung 9 of the single-operation ladders, which is already past their easiest facts — nothing with an operand of `1` can appear, so no `1 + 2` and no `1 × 5`. It opens around `8 + 2`, `9 − 7`, `2 × 3`, `8 ÷ 4` and tops out at work like `44 × 122` and `12427 ÷ 731`.
 
 ### The fact orders
 

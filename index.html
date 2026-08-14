@@ -227,6 +227,25 @@
     .mode-grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
     .mode-grid-4 .mode-card { padding: 18px 14px; }
 
+    /* "Everything" is the other four combined, so it sits across the bottom
+       rather than dangling as a fifth column that wraps on its own. */
+    .mode-card-wide {
+      grid-column: 1 / -1;
+      flex-direction: row;
+      align-items: center;
+      gap: 16px;
+      text-align: left;
+      padding: 14px 20px;
+    }
+
+    .mode-card-wide .mode-icon { font-size: 2rem; flex: 0 0 auto; }
+    .mode-card-wide .mode-name { flex: 0 0 auto; }
+    .mode-card-wide .mode-desc { flex: 1 1 auto; }
+
+    @media (max-width: 560px) {
+      .mode-card-wide { flex-direction: column; text-align: center; }
+    }
+
     .mode-card:hover { border-color: var(--primary); }
     .mode-icon { font-size: 2.6rem; line-height: 1; }
     .mode-name { font-size: 1.15em; font-weight: 800; }
@@ -553,10 +572,12 @@
       'op.sub.name':'Subtractions',   'op.sub.short':'Subtraction',
       'op.mul.name':'Multiplications','op.mul.short':'Multiplication',
       'op.div.name':'Divisions',      'op.div.short':'Division',
+      'op.mix.name':'Everything',     'op.mix.short':'Everything',
       'op.add.blurb':'Adding, from 1 + 1 up to carrying across three digits.',
       'op.sub.blurb':'Taking away, including borrowing across columns.',
       'op.mul.blurb':'All the tables mixed, up to two-digit work like 25 × 46.',
       'op.div.blurb':'Sharing out exactly — every answer is a whole number.',
+      'op.mix.blurb':'All four together — mostly sums low down, mostly divisions at the top. Starts partway up, so not a first climb.',
 
       ladderName:'Ladder Climb',
       ladderDesc:total=>`${total} rungs of rising difficulty. Right answer climbs, wrong answer drops one — you're never out.`,
@@ -662,10 +683,12 @@
       'op.sub.name':'Restes',         'op.sub.short':'Resta',
       'op.mul.name':'Multiplicacions','op.mul.short':'Multiplicació',
       'op.div.name':'Divisions',      'op.div.short':'Divisió',
+      'op.mix.name':'Tot barrejat',   'op.mix.short':'Tot barrejat',
       'op.add.blurb':'Sumar, des d\'1 + 1 fins a portar-ne amb tres xifres.',
       'op.sub.blurb':'Restar, incloent-hi demanar-ne a la columna del costat.',
       'op.mul.blurb':'Totes les taules barrejades, fins a coses com 25 × 46.',
       'op.div.blurb':'Repartir exactament: totes les respostes són nombres enters.',
+      'op.mix.blurb':'Les quatre alhora: sobretot sumes a baix i sobretot divisions al capdamunt. Comença a mitja escala, no és per estrenar-se.',
 
       ladderName:'Escala amunt',
       ladderDesc:total=>`${total} graons de dificultat creixent. Si encertes puges, si falles baixes un graó — mai quedes eliminat.`,
@@ -1137,14 +1160,14 @@
     state.op = null;
     updateHeader();
 
-    const cards = OP_KEYS.map(k => {
+    const cards = MENU_KEYS.map(k => {
       const op = OPS[k], l = ladderState(k);
       const progress = l.best > 1 ? t('bestSoFar', l.best, LADDER_RUNGS) : t('notStarted');
       return `
-        <button class="mode-card" data-op="${k}">
+        <button class="mode-card${op.mixed ? ' mode-card-wide' : ''}" data-op="${k}">
           <span class="mode-icon">${op.icon}</span>
           <span class="mode-name">${opName(op)}</span>
-          <span class="mode-desc">${opBlurb(op)}<br><b>${progress}</b></span>
+          <span class="mode-desc">${opBlurb(op)}${op.mixed ? ' ' : '<br>'}<b>${progress}</b></span>
         </button>`;
     }).join('');
 
@@ -1684,10 +1707,18 @@
                  : r <= 23 ? ['1x1','1x2']
                  : r <= 27 ? ['1x2','1x3','2x2']
                            : ['2x2','1x3','2x3']
-    }
+    },
+
+    // Owns no difficulty model of its own: it borrows a question from one of the
+    // four above, so every question it asks is already calibrated by the ladder it
+    // came from. See nextQuestion.
+    mix: { key:'mix', icon:'🔀', mixed:true }
   };
 
-  const OP_KEYS = ['add','sub','mul','div'];
+  // The four real operations. Difficulty models, pools and the personal history all
+  // work in terms of these; the mixed ladder is a way of drawing from them.
+  const OP_KEYS  = ['add','sub','mul','div'];
+  const MENU_KEYS = OP_KEYS.concat('mix');
 
   function difficulty(op, a, b){
     const base = (a <= 10 && b <= 10) ? op.fact(a, b) : 100 + op.wide(a, b);
@@ -1867,6 +1898,47 @@
     recentQuestions.push(a + ':' + b);
     if(recentQuestions.length > 8) recentQuestions.shift();
     return Math.random() < 0.5 ? [a, b] : [b, a];   // show both orientations
+  }
+
+  // ================= THE MIXED LADDER =================
+  // Operations fade in and out across the climb: sums lead, subtractions follow,
+  // then multiplication, with division at the top. Each keeps a small chance
+  // everywhere, so the order is a tendency rather than four blocks in a row.
+  const MIX_CENTRES = { add: 0, sub: 0.34, mul: 0.68, div: 1 };
+  const MIX_SPREAD  = 0.28;   // how far either side of its centre an operation reaches
+  const MIX_FLOOR_W = 0.10;   // chance an operation keeps everywhere else
+
+  function mixWeights(r){
+    const p = (r - 1) / (LADDER_RUNGS - 1);
+    return OP_KEYS.map(key => {
+      const d = p - MIX_CENTRES[key];
+      return { key, w: MIX_FLOOR_W + Math.exp(-(d * d) / (2 * MIX_SPREAD * MIX_SPREAD)) };
+    });
+  }
+
+  function pickMixOperation(r){
+    const weights = mixWeights(r);
+    let roll = Math.random() * weights.reduce((sum, x) => sum + x.w, 0);
+    for(const x of weights){ if((roll -= x.w) <= 0) return OPS[x.key]; }
+    return OPS[weights[weights.length - 1].key];
+  }
+
+  // This is not a first ladder. Its rung 1 starts where the single-operation ladders
+  // are already past their easiest facts, so it never opens with 1 + 2 or 1 x 5.
+  const MIX_FLOOR_RUNG = 9;
+  const mixSourceRung = r =>
+    Math.round(MIX_FLOOR_RUNG + (LADDER_RUNGS - MIX_FLOOR_RUNG) * (r - 1) / (LADDER_RUNGS - 1));
+
+  // Every question carries the operation it belongs to, so the mixed ladder can
+  // render it, mark it and record it against the right history.
+  function nextQuestion(op, r){
+    if(!op.mixed){
+      const [a, b] = pickQuestion(op, r);
+      return { op, a, b };
+    }
+    const source = pickMixOperation(r);
+    const [a, b] = pickQuestion(source, mixSourceRung(r));
+    return { op: source, a, b };
   }
 
   // One shot per rung: the first number given, spoken or typed, is the answer.
@@ -2079,8 +2151,11 @@
   function askLadderQuestion(op){
     const l = ladderState(op.key);
     const r = l.rung;
-    const [a, b] = pickQuestion(op, r);
-    const expected = op.answer(a, b);
+    // In the mixed ladder this is one of the four real operations, not `op`. It
+    // decides how the question reads, what counts as right, and whose history the
+    // answer joins — practice here feeds that operation's own ladder.
+    const { op: qOp, a, b } = nextQuestion(op, r);
+    const expected = qOp.answer(a, b);
 
     const statusEl = document.getElementById('ladderStatus');
     const heardEl  = document.getElementById('ladderHeard');
@@ -2088,13 +2163,13 @@
     const submitEl = document.getElementById('ladderSubmit');
 
     paintRung(op, r);
-    document.getElementById('ladderQ').textContent = `${op.render(a, b)} = ?`;
+    document.getElementById('ladderQ').textContent = `${qOp.render(a, b)} = ?`;
     heardEl.classList.remove('visible','correct','incorrect');
     submitEl.textContent = t('check');
     updateHeader();
 
     askOnce(expected, statusEl, heardEl, inputEl, submitEl, correct => {
-      recordAnswer(op, a, b, correct);
+      recordAnswer(qOp, a, b, correct);
       const previousBest = l.best;
       if(correct){
         if(r >= LADDER_RUNGS){
@@ -2122,7 +2197,7 @@
         l.rung = Math.max(1, r - 1);
         saveState();
         const where = r > 1 ? t('downToRung', l.rung) : t('stayOnRung1');
-        statusEl.innerHTML = `<span class="bad">${op.render(a, b)} = ${expected}.</span> ${where}`;
+        statusEl.innerHTML = `<span class="bad">${qOp.render(a, b)} = ${expected}.</span> ${where}`;
         paintRung(op, l.rung);
         setTimeout(() => askLadderQuestion(op), 2400);   // let the fall land, it's the teaching moment
       }
