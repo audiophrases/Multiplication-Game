@@ -138,6 +138,8 @@
     .heard-number.visible { opacity: 1; transform: translateY(0) scale(1); }
     .heard-number.correct { color: #1e8449; }
     .heard-number.incorrect { color: #c0392b; }
+    /* A guess in progress: shown while they are still speaking, not a verdict */
+    .heard-number.provisional { color: #7a8ea3; opacity: 0.5; }
 
     .table-preview {
       display: grid;
@@ -999,7 +1001,7 @@
     const showHeard = (val, isCorrect) => {
       if(!heardEl) return;
       heardEl.textContent = isNaN(val) ? '??' : val;
-      heardEl.classList.remove('correct','incorrect','visible');
+      heardEl.classList.remove('correct','incorrect','provisional','visible');
       heardEl.classList.add(isCorrect ? 'correct' : 'incorrect','visible');
       clearTimeout(heardTimeout);
       heardTimeout = setTimeout(()=>{
@@ -1013,13 +1015,20 @@
       const rec = new SpeechRecognition();
       activeRecognizer = rec;
       rec.lang = speechLang;
-      rec.interimResults = false;
+      // See askOnce: interim results are what make this feel immediate instead of
+      // waiting on Chrome's end-of-speech detection.
+      rec.interimResults = true;
       rec.maxAlternatives = 1;
       rec.continuous = false;
 
       rec.onresult = (e) => {
-        const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ');
+        const results = Array.from(e.results);
+        const transcript = results.map(r => r[0].transcript).join(' ');
+        const isFinal = results.some(r => r.isFinal);
         const val = parseSpokenNumber(transcript);
+
+        // A matching interim is accepted straight away; a wrong one waits for the
+        // final, so a half-heard answer never gets called wrong.
         if(val === expected){
           if(inputEl) inputEl.oninput = null;
           showHeard(val, true);
@@ -1028,11 +1037,19 @@
           statusEl.innerHTML = `<span class="good">${t('heardCorrect', transcript.trim(), val)}</span>`;
           playSfx(audioSuccess);
           setTimeout(() => onCorrect(transcript.trim(), val), 600);
-        } else {
-          showHeard(val, false);
-          onMismatch && onMismatch(val, transcript.trim());
-          statusEl.innerHTML = `<span class="bad">${t('heardWrong', transcript.trim(), isNaN(val) ? null : val)}</span>`;
+          return;
         }
+        if(!isFinal){
+          if(!isNaN(val) && heardEl){
+            heardEl.textContent = val;
+            heardEl.classList.remove('correct','incorrect');
+            heardEl.classList.add('provisional','visible');
+          }
+          return;
+        }
+        showHeard(val, false);
+        onMismatch && onMismatch(val, transcript.trim());
+        statusEl.innerHTML = `<span class="bad">${t('heardWrong', transcript.trim(), isNaN(val) ? null : val)}</span>`;
       };
 
       rec.onerror = () => {
@@ -1040,7 +1057,7 @@
       };
 
       rec.onend = () => {
-        if(keepListening) setTimeout(startRecognition, 250);
+        if(keepListening) setTimeout(startRecognition, 150);
       };
 
       try {
@@ -1828,6 +1845,14 @@
     stopListening();
     let settled = false;
 
+    // What the recogniser thinks it is hearing, before it has committed to it.
+    const showProvisional = value => {
+      if(!heardEl || settled) return;
+      heardEl.textContent = value;
+      heardEl.classList.remove('correct','incorrect');
+      heardEl.classList.add('provisional','visible');
+    };
+
     const settle = (value, source) => {
       if(settled) return;
       settled = true;
@@ -1839,7 +1864,7 @@
       const correct = value === expected;
       if(heardEl){
         heardEl.textContent = isNaN(value) ? '??' : value;
-        heardEl.classList.remove('correct','incorrect');
+        heardEl.classList.remove('correct','incorrect','provisional');
         heardEl.classList.add(correct ? 'correct' : 'incorrect', 'visible');
       }
       onVerdict(correct, value, source);
@@ -1876,14 +1901,29 @@
       const rec = new SpeechRecognition();
       activeRecognizer = rec;
       rec.lang = speechLang;
-      rec.interimResults = false;
+      // Interim results are the difference between reacting while the child is still
+      // speaking and waiting for Chrome to decide the utterance ended, finalise it,
+      // and only then hand it over — which is most of the delay people feel.
+      rec.interimResults = true;
       rec.maxAlternatives = 1;
       rec.continuous = false;
 
       rec.onresult = e => {
-        const transcript = Array.from(e.results).map(r => r[0].transcript).join(' ');
+        const results = Array.from(e.results);
+        const transcript = results.map(r => r[0].transcript).join(' ');
+        const isFinal = results.some(r => r.isFinal);
         const val = parseSpokenNumber(transcript);
-        // A mis-hear must never cost a rung — only a number we actually parsed counts as an answer.
+
+        // Accept early only on a match. An interim that already reads as the right
+        // answer is safe: the recogniser is telling us they said it. An interim
+        // that reads as a wrong one may still be refined, so it waits for the
+        // final — a mis-hear must never cost a rung.
+        if(val === expected){ settle(val, 'spoken'); return; }
+
+        if(!isFinal){
+          if(!isNaN(val)) showProvisional(val);
+          return;
+        }
         if(isNaN(val)){
           statusEl.innerHTML = `<span class="bad">${t('noNumber')}</span>`;
           return;
@@ -1891,7 +1931,7 @@
         settle(val, 'spoken');
       };
       rec.onerror = () => {};
-      rec.onend = () => { if(keepListening && !settled) setTimeout(startRecognition, 250); };
+      rec.onend = () => { if(keepListening && !settled) setTimeout(startRecognition, 150); };
 
       try {
         rec.start();

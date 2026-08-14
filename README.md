@@ -75,6 +75,17 @@ The scores above are what is hard for children in general. On top of them the ga
 
 The Challenge Quiz in Tables Adventure feeds the multiplication record, using whether you got each question right first time.
 
+## Speech responsiveness
+
+The recogniser runs with `interimResults: true`, so the game sees hypotheses while the child is still speaking rather than waiting for Chrome to detect end-of-speech and finalise — which is where most of the perceived delay in a voice interface comes from.
+
+Interim results are accepted **asymmetrically**, because this game scores one shot per question:
+
+- An interim that already reads as the **right** answer is accepted immediately. If the recogniser thinks they said it, they said it.
+- An interim that reads as a **wrong** answer is never acted on; it waits for the final result, since a partial hypothesis often gets refined ("fifty" becoming "fifty six"). Acting on it would cost a rung for a mis-hear.
+
+The effect is that correct answers land instantly and wrong ones get the recogniser's full, best attempt. Meanwhile the number being heard is shown greyed out as a provisional guess, so the child can see it is listening.
+
 ## Translations
 
 Every interface string lives in `STRINGS` in `index.html`, keyed by language. Values are either plain strings or **functions of whatever the sentence needs**, so word order stays the translator's business rather than being fixed by concatenation at the call site:
