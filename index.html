@@ -94,6 +94,23 @@
       margin-bottom: 10px;
     }
 
+    /* Only ever created by ?voice=debug, for checking the microphone on a real
+       Chromebook or tablet where there is no console to open. */
+    #voiceDebug {
+      position: fixed;
+      left: 8px;
+      bottom: 8px;
+      z-index: 9999;
+      max-width: calc(100vw - 16px);
+      padding: 6px 9px;
+      border-radius: 8px;
+      background: rgba(15, 27, 45, 0.88);
+      color: #d7f5e0;
+      font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      pointer-events: none;
+    }
+
     .bad { color: #c0392b; font-weight: 700; }
     .good { color: #1e8449; font-weight: 700; }
 
@@ -501,6 +518,9 @@
   // Restart from the top every time: replaying an Audio element that is still
   // playing is a no-op, which silently swallows sounds during a fast streak.
   function playSfx(audio){
+    // Whatever we play arrives back at our own microphone a moment later. The
+    // engine ignores what it hears for as long as that takes.
+    try { VoiceEngine.deafen(600); } catch(_) {}
     try {
       audio.currentTime = 0;
       const p = audio.play();
@@ -510,8 +530,6 @@
 
   // SPEECH
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let activeRecognizer = null;
-  let keepListening = false;
   let voiceControl = null;   // restart handle for the question currently being asked
 
   const LANGUAGES = [
@@ -601,10 +619,11 @@
       sayOrKeypad:'Say your answer, or use the keypad — first answer counts.',
       keypadOpen:"Keypad open — tap Send when you're ready.",
       noNumber:"Didn't catch a number — say it again.",
-      micBusy:'Microphone busy — use the keypad.',
       tapKeys:'Tap the keys, then Send.',
       listening:'Listening...',
-      troubleHearing:'Had trouble hearing you. Trying again...',
+      netTrouble:'The connection dropped — the keypad always works.',
+      micDenied:'The microphone is blocked. Allow it in your browser, or use the keypad.',
+      micNoDevice:'No microphone found — use the keypad.',
       typedCorrect:v=>`Typed ${v}. Correct!`,
       heardCorrect:(txt,v)=>`Heard "${txt}" → ${v}. Correct!`,
       heardWrong:(txt,v)=>`Heard "${txt}"${v===null?'':` → ${v}`} — try again.`,
@@ -712,10 +731,11 @@
       sayOrKeypad:'Digues la resposta o fes servir el teclat — compta la primera.',
       keypadOpen:'Teclat obert — prem Envia quan estiguis a punt.',
       noNumber:'No he entès cap nombre — torna-ho a dir.',
-      micBusy:'El micròfon està ocupat — fes servir el teclat.',
       tapKeys:'Prem les tecles i després Envia.',
       listening:'Escoltant...',
-      troubleHearing:'No t\'he sentit bé. Ho torno a provar...',
+      netTrouble:'Connexió perduda — el teclat sempre funciona.',
+      micDenied:'El micròfon està bloquejat. Permet-lo al navegador o fes servir el teclat.',
+      micNoDevice:'No hi ha cap micròfon — fes servir el teclat.',
       typedCorrect:v=>`Has escrit ${v}. Correcte!`,
       heardCorrect:(txt,v)=>`He sentit "${txt}" → ${v}. Correcte!`,
       heardWrong:(txt,v)=>`He sentit "${txt}"${v===null?'':` → ${v}`} — torna-ho a provar.`,
@@ -893,34 +913,284 @@
   };
 
   // SPEECH HELPERS
-  // Silences the microphone but leaves the question in flight, so the keypad can
-  // take over and hand control back.
-  function stopRecognizer(){
-    keepListening = false;
-    if(activeRecognizer){
-      activeRecognizer.onresult = null;
-      activeRecognizer.onerror = null;
-      activeRecognizer.onend = null;
-      // abort() rather than stop(): we never want the pending final result once we
-      // are tearing down, and it frees the microphone immediately instead of
-      // leaving a restart to race a session that is still winding down.
-      try { activeRecognizer.abort(); } catch(_) {}
-      activeRecognizer = null;
+  // A voice readout for testing on real devices, where the console is out of
+  // reach: load the page with ?voice=debug and it shows what the microphone is
+  // doing and how long each answer took to land.
+  const voiceDebug = (() => {
+    const on = /[?&]voice=debug\b/.test(location.search);
+    let box = null;
+    const events = [];
+    function paint(extra){
+      if(!on) return;
+      if(!box){
+        box = document.createElement('div');
+        box.id = 'voiceDebug';
+        document.body.appendChild(box);
+      }
+      let r = {};
+      try { r = VoiceEngine.report(); } catch(_) {}
+      box.textContent = `mic ${r.running ? 'live' : r.rec ? 'opening' : 'off'}`
+        + ` · ${r.handler ? 'armed' : 'idle'} · ${r.lang || '-'}`
+        + (r.fatal ? ` · ${r.fatal}` : '')
+        + (r.failures ? ` · retry ${r.failures}` : '')
+        + `\n${extra || ''}\n${events.slice(-10).join(' ')}`;
     }
-  }
+    return {
+      enabled: on,
+      event(what){ if(!on) return; events.push(what); paint(); },
+      heard(hyps, isFinal, armedAt){
+        if(!on) return;
+        const ms = armedAt ? Date.now() - armedAt : 0;
+        paint(`${isFinal ? 'FINAL' : 'interim'} +${ms}ms  ${hyps.slice(0, 3).join('  |  ')}`);
+      }
+    };
+  })();
 
-  // Ends the question too: any pending pause/resume handle is dropped, so a stale
-  // resume can never revive a recognizer for a screen that has moved on.
+  // ================= THE VOICE ENGINE =================
+  // One recognizer, opened once and kept running across questions, instead of a
+  // fresh one per question. Rebuilding was the single biggest source of "it didn't
+  // hear me": every start() opens a new connection to the browser's speech backend,
+  // and for the few hundred milliseconds that takes the microphone is deaf — which
+  // is exactly when a child answering straight away is speaking. Questions now only
+  // arm and disarm a handler on a microphone that is already warm, and the engine
+  // looks after keeping it that way.
+  const VoiceEngine = (() => {
+    // The gap between questions is under three seconds and is deliberately bridged,
+    // because bridging it is the whole reason this exists. A game left sitting on a
+    // menu is a different matter and gives the microphone back.
+    const IDLE_GRACE  = 20000;
+    const WATCH_EVERY = 3000;
+    const STALL_MS    = 15000;   // a live session this quiet has stopped listening
+    const START_MS    = 5000;    // a start() that never reached onstart is stuck
+    const MAX_BACKOFF = 2000;
+
+    let rec = null;          // the live session, null between sessions
+    let wanted = false;      // whether a session should be running at all
+    let handler = null;      // the armed question, or null between questions
+    let seenLen = 0;         // utterances seen so far in this session
+    let skipBelow = 0;       // utterances that began before the armed question
+    let failures = 0;        // consecutive bad starts, for the backoff
+    let fatal = null;        // 'denied' | 'nomic' — retrying cannot fix these
+    let deafUntil = 0;       // our own chimes, played into our own microphone
+    let sessionLang = null;  // a live session is locked to the language it opened with
+    let running = false, startedAt = 0, lastEventAt = 0, armedAt = 0;
+    let retryTimer = null, idleTimer = null, watchTimer = null;
+
+    const now = () => Date.now();
+    const usable = () => !!SpeechRecognition && !micMuted && !fatal;
+    const mark = what => { lastEventAt = now(); voiceDebug.event(what); };
+
+    function schedule(delay){
+      clearTimeout(retryTimer);
+      const wait = delay !== undefined ? delay
+        : failures ? Math.min(MAX_BACKOFF, 120 * Math.pow(2, failures - 1))
+        : 0;
+      retryTimer = setTimeout(open, wait);
+    }
+
+    function detach(r){
+      if(!r) return;
+      r.onstart = r.onaudiostart = r.onspeechstart = null;
+      r.onresult = r.onerror = r.onend = null;
+    }
+
+    // Drops the live session without giving up on voice. The replacement waits a
+    // moment: start() throws if it lands while the old session is still handing
+    // the microphone back.
+    function recycle(){
+      const r = rec;
+      rec = null; running = false;
+      detach(r);
+      if(r) try { r.abort(); } catch(_) {}
+      failures = 0;
+      if(wanted) schedule(250);
+    }
+
+    function open(){
+      clearTimeout(retryTimer); retryTimer = null;
+      if(!wanted || rec || !usable()) return;
+      let r;
+      try { r = new SpeechRecognition(); } catch(_) { return; }
+      rec = r;
+      running = false;
+      seenLen = 0; skipBelow = 0;
+      sessionLang = speechLang;
+      r.lang = sessionLang;
+      // One open stream rather than one session per utterance. A child who says
+      // "umm... forty two" used to have the pause end the session, and the answer
+      // itself landed in the gap while the next session was still connecting.
+      // Android often ends the session anyway, which is what onend is for.
+      r.continuous = true;
+      // Reacting while they are still speaking, instead of waiting for the browser
+      // to decide the utterance ended and only then hand it over.
+      r.interimResults = true;
+      // The top guess for an isolated number is often a homophone while the second
+      // or third is the number itself.
+      r.maxAlternatives = 5;
+
+      startedAt = now(); mark('open');
+      r.onstart       = () => { if(rec === r){ running = true; failures = 0; mark('start'); } };
+      r.onaudiostart  = () => { if(rec === r) mark('audio'); };
+      r.onspeechstart = () => { if(rec === r) mark('speech'); };
+      r.onresult      = e  => { if(rec === r) onResult(e); };
+      r.onerror       = e  => { if(rec === r) onError(e); };
+      r.onend         = () => {
+        if(rec !== r) return;
+        rec = null; running = false; mark('end');
+        if(!wanted || !usable()) return;
+        // A session that ended almost as soon as it opened is failing rather than
+        // cycling. Anything else reopens at once: by the time onend fires the
+        // browser has already released the device, so there is nothing to wait for.
+        failures = (now() - startedAt < 400) ? failures + 1 : 0;
+        schedule();
+      };
+
+      try { r.start(); }
+      catch(_){
+        // start() throws while a previous session is still winding down, and onend
+        // never fires for a start that failed, so the retry has to come from here.
+        detach(r); rec = null;
+        failures++;
+        schedule();
+      }
+    }
+
+    function onResult(e){
+      mark('result');
+      failures = 0;
+      seenLen = e.results.length;
+      // Nothing armed, or one of our own chimes is going into the microphone:
+      // swallow the utterance so it can never surface on the next question.
+      if(!handler || Date.now() < deafUntil){ skipBelow = seenLen; return; }
+      // A continuous session accumulates every utterance it has ever heard, so only
+      // the ones that began after this question was armed are its business.
+      for(let i = Math.max(e.resultIndex, skipBelow); i < e.results.length; i++){
+        const alt = e.results[i];
+        const hyps = [];
+        for(let k = 0; k < alt.length; k++){
+          const txt = alt[k] && alt[k].transcript;
+          if(txt && txt.trim()) hyps.push(txt.trim());
+        }
+        if(!hyps.length) continue;
+        voiceDebug.heard(hyps, alt.isFinal, armedAt);
+        const armed = handler;
+        armed.onSpeech(hyps, !!alt.isFinal);
+        if(handler !== armed) return;   // the question settled and disarmed itself
+      }
+    }
+
+    function onError(e){
+      const err = (e && e.error) || 'unknown';
+      mark('error:' + err);
+      // Silence and our own teardown are routine, not faults: onend follows and
+      // reopens. Reporting them was telling children the microphone was broken
+      // every time they paused to think.
+      if(err === 'no-speech' || err === 'aborted') return;
+      if(err === 'not-allowed' || err === 'service-not-allowed') return fail('denied');
+      if(err === 'audio-capture') return fail('nomic');
+      failures++;
+      // School wifi drops more often than anything else here. onend handles the
+      // retry; the question only needs to know why voice went quiet.
+      if(err === 'network' && handler && handler.onTrouble) handler.onTrouble('network');
+    }
+
+    function fail(kind){
+      fatal = kind;
+      wanted = false;
+      clearTimeout(retryTimer); retryTimer = null;
+      if(handler && handler.onFatal) handler.onFatal(kind);
+    }
+
+    function watch(){
+      if(!wanted || !usable()) return;
+      const t = now();
+      if(!rec){ schedule(); return; }
+      if(!running && t - startedAt > START_MS) return recycle();
+      if(running && t - lastEventAt > STALL_MS) return recycle();
+    }
+
+    return {
+      supported: () => !!SpeechRecognition,
+      blocked: () => fatal,
+
+      // Opens the microphone ahead of the first question, so the permission prompt
+      // and the backend handshake happen while a child is still reading the screen
+      // rather than while they are trying to answer.
+      prime(){
+        if(!usable()) return;
+        wanted = true;
+        clearTimeout(idleTimer); idleTimer = null;
+        if(!watchTimer) watchTimer = setInterval(watch, WATCH_EVERY);
+        open();
+      },
+
+      // Arms a question. Anything already in flight belongs to whatever came
+      // before, so a trailing final can never answer the question that follows it.
+      listen(h){
+        handler = h;
+        skipBelow = seenLen;
+        armedAt = Date.now();
+        this.prime();
+        if(fatal && h.onFatal) h.onFatal(fatal);
+      },
+
+      // The question is over; the microphone is not. It stays warm for the next
+      // one, and only a genuinely idle game gives it back.
+      release(){
+        if(!handler) return;
+        handler = null;
+        skipBelow = seenLen;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => { if(!handler) VoiceEngine.sleep(); }, IDLE_GRACE);
+      },
+
+      // Hands the microphone back without forgetting anything, so prime() wakes it.
+      sleep(){
+        wanted = false; handler = null;
+        clearTimeout(idleTimer); idleTimer = null;
+        clearTimeout(retryTimer); retryTimer = null;
+        if(watchTimer){ clearInterval(watchTimer); watchTimer = null; }
+        const r = rec;
+        rec = null; running = false;
+        detach(r);
+        if(r) try { r.abort(); } catch(_) {}
+      },
+
+      // A live session is locked to the language it opened with, so switching
+      // language means cycling it.
+      relang(){ if(rec && sessionLang !== speechLang) recycle(); },
+
+      // Our own success chime leaves the speaker and arrives at the microphone.
+      deafen(ms){ deafUntil = Math.max(deafUntil, Date.now() + (ms || 500)); },
+
+      // Permission can be granted after it was refused, and a Chromebook can have
+      // its microphone plugged back in. Both deserve another go.
+      retry(){ fatal = null; failures = 0; this.prime(); },
+
+      report(){ return { rec: !!rec, running, wanted, handler: !!handler, fatal, failures, lang: sessionLang }; }
+    };
+  })();
+
+  // Ends the question. The handler is dropped but the microphone deliberately
+  // keeps running, so the next question does not pay to open it again.
   function stopListening(){
     voiceControl = null;
-    stopRecognizer();
+    VoiceEngine.release();
+  }
+
+  // Gives the microphone up altogether — muting, or leaving voice behind.
+  function stopRecognizer(){
+    VoiceEngine.sleep();
   }
 
   function requireSpeechRecognition(){
-    if(!SpeechRecognition){
+    if(!VoiceEngine.supported()){
       showOverlay(`<h2>${t('voiceOffTitle')}</h2><p>${t('voiceOffBody')}</p>`);
       return false;
     }
+    // Called from the button that starts a round, which is a user gesture and the
+    // best possible moment to get the permission prompt and the handshake done.
+    VoiceEngine.prime();
     return true;
   }
 
@@ -954,24 +1224,158 @@
   // extra context it gives the recogniser, without the prefix being required.
   const NUMBER_JOINERS = new Set(['i', 'and', 'y', 'number', 'numero', 'número', 'nombre']);
 
-  function parseSpokenNumber(text, lang){
+  // A deliberately crude phonetic fold. It maps the ways these two languages spell
+  // the same sound onto one key, so a mis-heard word can still be recognised as the
+  // number it rhymes with: "sexty" folds onto "sixty", "cuaranta" onto "quaranta".
+  // Only ever consulted for words that are not already known number words, and only
+  // ever to accept an answer — see matchesExpected — so being generous here can
+  // rescue a right answer but can never mark a wrong one right.
+  function phoneticFold(word){
+    let w = String(word).toLowerCase();
+    if(w.normalize) w = w.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    w = w.replace(/[^a-z]/g, '');
+    if(!w) return '';
+    return w
+      .replace(/ph/g, 'f')
+      .replace(/qu/g, 'k')
+      .replace(/ny/g, 'n')            // Catalan ny
+      .replace(/ll/g, 'l')
+      .replace(/th/g, 't')
+      .replace(/ch/g, 'k')
+      .replace(/h/g, '')
+      .replace(/c([ei])/g, 's$1')     // cinc, cent
+      .replace(/g([ei])/g, 'j$1')
+      .replace(/tj|tg|dj/g, 'j')
+      .replace(/[ckq]/g, 'k')
+      .replace(/z/g, 's')
+      .replace(/x/g, 's')
+      .replace(/v/g, 'b')             // betacism: v and b are one sound in Catalan
+      .replace(/w/g, 'u')
+      .replace(/y/g, 'i')
+      .replace(/e/g, 'a')             // unstressed a and e fall together in Catalan,
+      .replace(/o/g, 'u')             // as do o and u
+      .replace(/(.)\1+/g, '$1');
+  }
+
+  // Levenshtein that gives up as soon as every path is already over budget, so a
+  // token can be compared against the whole vocabulary on every interim result.
+  function editDistance(a, b, cap){
+    if(a === b) return 0;
+    const m = a.length, n = b.length;
+    if(Math.abs(m - n) > cap) return cap + 1;
+    let prev = Array.from({ length: n + 1 }, (_, j) => j);
+    let cur = new Array(n + 1);
+    for(let i = 1; i <= m; i++){
+      cur[0] = i;
+      let best = cur[0];
+      for(let j = 1; j <= n; j++){
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if(cur[j] < best) best = cur[j];
+      }
+      if(best > cap) return cap + 1;
+      const swap = prev; prev = cur; cur = swap;
+    }
+    return prev[n];
+  }
+
+  const FOLDED_WORDS = new Map();
+  function foldedVocabulary(map){
+    let folded = FOLDED_WORDS.get(map);
+    if(folded) return folded;
+    folded = [];
+    Object.keys(map).forEach(word => {
+      const f = phoneticFold(word);
+      if(f) folded.push([f, map[word]]);
+    });
+    FOLDED_WORDS.set(map, folded);
+    return folded;
+  }
+
+  // The nearest number word by sound, or undefined when the answer is not clear
+  // cut. A tie is treated as no match: half the tens are within two edits of each
+  // other, and guessing between them is exactly how a child loses a rung they won.
+  function fuzzyWordValue(token, map){
+    const f = phoneticFold(token);
+    if(!f) return undefined;
+    // A tight budget, and tighter still for short words: "hola" is three edits from
+    // half the vocabulary, and a long word can absorb two without becoming another
+    // number. "kuaranta" reaches "karanta"; "alafant" reaches nothing.
+    const cap = f.length >= 8 ? 2 : f.length >= 4 ? 1 : 0;
+    let bestD = cap + 1, bestVals = null;
+    foldedVocabulary(map).forEach(([cand, val]) => {
+      const d = editDistance(f, cand, cap);
+      if(d > cap) return;
+      if(d < bestD){ bestD = d; bestVals = [val]; }
+      else if(d === bestD && bestVals.indexOf(val) === -1) bestVals.push(val);
+    });
+    return bestVals && bestVals.length === 1 ? bestVals[0] : undefined;
+  }
+
+  // Recognisers run words together — "fortytwo", "quarantados", "vintiun" — so a
+  // token nothing else recognises is tried as a run of number words.
+  function segmentToken(token, map, out){
+    if(!token) return true;
+    for(let cut = token.length; cut >= 1; cut--){
+      const head = token.slice(0, cut);
+      const val = map[head];
+      if(val === undefined && !NUMBER_JOINERS.has(head)) continue;
+      if(cut === token.length){
+        if(val !== undefined) out.push(val);
+        return true;
+      }
+      const mark = out.length;
+      if(val !== undefined) out.push(val);
+      if(segmentToken(token.slice(cut), map, out)) return true;
+      out.length = mark;
+    }
+    return false;
+  }
+
+  // opts.fuzzy turns on the phonetic rescue above. Without it this is the strict
+  // reading: known words and digits only. The strict reading is what gets recorded
+  // as the player's answer, so a fuzzy match can never put a number in the history
+  // that was never said.
+  function parseSpokenNumber(text, lang, opts){
     if(!text) return NaN;
     const map = NUMBER_WORDS[lang || speechLang] || NUMBER_WORDS['en-US'];
 
     // Digits and words are tokenised together. Chrome regularly returns a mixture —
-    // "20 for" for twenty four, "fifty 6" for fifty six — and reading only the first
-    // digit run, as this used to, threw away the rest of the answer.
+    // "20 for" for twenty four, "fifty 6" for fifty six, "42nd" for forty two — and
+    // reading only the first digit run, as this used to, threw away the rest.
     const tokens = text.toLowerCase()
       .replace(/[^0-9a-zàèéíòóúïüç\s-]/g, ' ')
+      .replace(/(\d)([a-zàèéíòóúïüç])/g, '$1 $2')
+      .replace(/([a-zàèéíòóúïüç])(\d)/g, '$1 $2')
       .split(/[\s-]+/)
       .filter(Boolean);
 
-    const values = [];
+    const slots = [];
+    let exact = 0;
     tokens.forEach(tok => {
       if(NUMBER_JOINERS.has(tok)) return;
-      if(/^\d+$/.test(tok)){ values.push(parseInt(tok, 10)); return; }
+      if(/^\d+$/.test(tok)){ slots.push(parseInt(tok, 10)); exact++; return; }
       const val = map[tok];
-      if(val !== undefined) values.push(val);
+      if(val !== undefined){ slots.push(val); exact++; return; }
+      slots.push(tok);
+    });
+
+    // The phonetic rescue needs an anchor: either something in the utterance already
+    // read as a number, or the utterance was a single word, which is what an answer
+    // actually looks like. Without that, passing chatter — "hola, que tal" — starts
+    // resolving to numbers nobody said.
+    const fuzzy = !!(opts && opts.fuzzy) && (exact > 0 || slots.length === 1);
+
+    const values = [];
+    slots.forEach(slot => {
+      if(typeof slot === 'number'){ values.push(slot); return; }
+      if(!fuzzy) return;
+      const parts = [];
+      if(segmentToken(slot, map, parts) && parts.length){
+        parts.forEach(p => values.push(p));
+        return;
+      }
+      const near = fuzzyWordValue(slot, map);
+      if(near !== undefined) values.push(near);
     });
     if(!values.length) return NaN;
 
@@ -998,16 +1402,15 @@
     return total + current;
   }
 
-  // True when any hypothesis the recogniser offered reads as the expected answer.
-  // Only ever used to accept, never to reject, so a lucky alternative can rescue a
-  // correct answer but no alternative can mark a wrong one right.
-  function matchesExpected(results, expected){
-    return results.some(res => {
-      for(let i = 0; i < res.length; i++){
-        if(parseSpokenNumber(res[i].transcript) === expected) return true;
-      }
-      return false;
-    });
+  // True when any hypothesis the recogniser offered reads as the expected answer,
+  // strictly or by sound. Only ever used to accept, never to reject: a lucky
+  // alternative or a generous fold can rescue a correct answer, but nothing here
+  // can mark a wrong one right, because the number that gets recorded always comes
+  // from the strict parse.
+  function matchesExpected(hypotheses, expected){
+    return hypotheses.some(txt =>
+      parseSpokenNumber(txt) === expected ||
+      parseSpokenNumber(txt, null, { fuzzy: true }) === expected);
   }
 
   function listenForNumber(expected, statusEl, onCorrect, onMismatch, heardEl, inputEl){
@@ -1015,7 +1418,6 @@
     // speech at all still gets told why.
     if(!micMuted && !requireSpeechRecognition()) return;
     stopListening();
-    keepListening = true;
 
     if(inputEl){
       inputEl.value = '';
@@ -1046,7 +1448,6 @@
     }
 
     let heardTimeout = null;
-    let startFailures = 0;
 
     const showHeard = (val, isCorrect) => {
       if(!heardEl) return;
@@ -1059,36 +1460,24 @@
       }, 2000);
     };
 
-    const startRecognition = () => {
-      if(!keepListening) return;
-      statusEl.textContent = t('listening');
-      const rec = new SpeechRecognition();
-      activeRecognizer = rec;
-      rec.lang = speechLang;
-      // See askOnce: interim results are what make this feel immediate instead of
-      // waiting on Chrome's end-of-speech detection.
-      rec.interimResults = true;
-      rec.maxAlternatives = 5;   // see askOnce: a homophone often ranks above the number
-      rec.continuous = false;
-
-      rec.onresult = (e) => {
-        const results = Array.from(e.results);
-        const transcript = results.map(r => r[0].transcript).join(' ');
-        const isFinal = results.some(r => r.isFinal);
+    const speech = {
+      onSpeech(hypotheses, isFinal){
+        const transcript = hypotheses[0];
         const val = parseSpokenNumber(transcript);
 
         // A matching interim is accepted straight away; a wrong one waits for the
         // final, so a half-heard answer never gets called wrong.
-        if(val === expected || matchesExpected(results, expected)){
+        if(val === expected || matchesExpected(hypotheses, expected)){
           if(inputEl) inputEl.oninput = null;
           // Report the expected value, not the top guess: when a lower-ranked
-          // alternative is what matched, the top guess is the wrong word.
+          // alternative or the phonetic fold is what matched, the top guess is the
+          // wrong word.
           showHeard(expected, true);
           setPreferredInput('voice');
           stopListening();
-          statusEl.innerHTML = `<span class="good">${t('heardCorrect', transcript.trim(), expected)}</span>`;
+          statusEl.innerHTML = `<span class="good">${t('heardCorrect', transcript, expected)}</span>`;
           playSfx(audioSuccess);
-          setTimeout(() => onCorrect(transcript.trim(), expected), 600);
+          setTimeout(() => onCorrect(transcript, expected), 600);
           return;
         }
         if(!isFinal){
@@ -1100,47 +1489,37 @@
           return;
         }
         showHeard(val, false);
-        onMismatch && onMismatch(val, transcript.trim());
-        statusEl.innerHTML = `<span class="bad">${t('heardWrong', transcript.trim(), isNaN(val) ? null : val)}</span>`;
-      };
-
-      rec.onerror = () => {
-        statusEl.textContent = t('troubleHearing');
-      };
-
-      rec.onend = () => {
-        if(keepListening) setTimeout(startRecognition, 150);
-      };
-
-      try {
-        rec.start();
-        startFailures = 0;
-      } catch(_) {
-        // See askOnce: a failed start fires no onend, so it must retry itself.
-        activeRecognizer = null;
-        if(++startFailures <= 8) setTimeout(startRecognition, 300);
-        else statusEl.innerHTML = `<span class="bad">${t('micBusy')}</span>`;
+        onMismatch && onMismatch(val, transcript);
+        statusEl.innerHTML = `<span class="bad">${t('heardWrong', transcript, isNaN(val) ? null : val)}</span>`;
+      },
+      onTrouble(){ statusEl.textContent = t('netTrouble'); },
+      onFatal(kind){
+        statusEl.innerHTML = `<span class="bad">${t(kind === 'denied' ? 'micDenied' : 'micNoDevice')}</span>`;
+        if(inputEl) showKeypad(inputEl);   // the only way in now, so open it
       }
     };
 
     voiceControl = {
+      // Unmuting and switching language both land here. listen() re-arms on the
+      // running microphone; relang() only cycles it when the language actually
+      // changed, because a live session is locked to the one it opened with.
       restart(){
-        stopRecognizer();
         if(!voiceAvailable()) return;
-        keepListening = true;
-        startFailures = 0;
-        setTimeout(startRecognition, 120);
+        VoiceEngine.retry();
+        VoiceEngine.listen(speech);
+        VoiceEngine.relang();
+        statusEl.textContent = t('listening');
       }
     };
 
-    if(voiceAvailable()){
-      startRecognition();
-    } else {
-      keepListening = false;
+    if(!voiceAvailable()){
       statusEl.textContent = t('micOffStatus');
       if(inputEl) showKeypad(inputEl);   // the only way in while the mic is off
       return;
     }
+
+    VoiceEngine.listen(speech);
+    statusEl.textContent = t('listening');
     // Carry the last question's choice into this one; voice stays live regardless.
     if(preferredInput === 'keypad' && inputEl) showKeypad(inputEl);
   }
@@ -1945,6 +2324,12 @@
   function askOnce(expected, statusEl, heardEl, inputEl, submitBtn, onVerdict){
     stopListening();
     let settled = false;
+    let graceTimer = null;
+
+    // A wrong answer heard once is not yet a wrong answer. Recognisers revise their
+    // own guess, and a child who sees themselves mis-heard repeats the number
+    // immediately — both arrive inside this window, and both used to cost a rung.
+    const WRONG_GRACE = 700;
 
     // What the recogniser thinks it is hearing, before it has committed to it.
     const showProvisional = value => {
@@ -1957,6 +2342,7 @@
     const settle = (value, source) => {
       if(settled) return;
       settled = true;
+      clearTimeout(graceTimer);
       setPreferredInput(source === 'spoken' ? 'voice' : 'keypad');
       hideKeypad();
       stopListening();
@@ -1979,8 +2365,8 @@
     if(inputEl){
       inputEl.disabled = false;
       inputEl.value = '';
-      // Deliberately not focused: focusing opens the keypad, which would mute the
-      // microphone before the player has chosen how they want to answer.
+      // Deliberately not focused: focusing opens the keypad, which would cover the
+      // question before the player has chosen how they want to answer.
       inputEl.onkeydown = e => { if(e.key === 'Enter') commitTyped(); };
       inputEl._submit = commitTyped;
     }
@@ -1989,38 +2375,23 @@
       submitBtn.onclick = commitTyped;
     }
 
-    keepListening = false;
-    let startFailures = 0;
-    const startRecognition = () => {
-      if(!keepListening || settled) return;
-      const rec = new SpeechRecognition();
-      activeRecognizer = rec;
-      rec.lang = speechLang;
-      // Interim results are the difference between reacting while the child is still
-      // speaking and waiting for Chrome to decide the utterance ended, finalise it,
-      // and only then hand it over — which is most of the delay people feel.
-      rec.interimResults = true;
-      // Chrome's top guess for an isolated number is often a homophone while its
-      // second or third is the number itself. Asking for several and accepting any
-      // that reads as the right answer costs the child nothing.
-      rec.maxAlternatives = 5;
-      rec.continuous = false;
-
-      rec.onresult = e => {
-        const results = Array.from(e.results);
-        const transcript = results.map(r => r[0].transcript).join(' ');
-        const isFinal = results.some(r => r.isFinal);
-        const val = parseSpokenNumber(transcript);
+    const speech = {
+      onSpeech(hypotheses, isFinal){
+        if(settled) return;
 
         // Accept early only on a match. An interim that already reads as the right
         // answer is safe: the recogniser is telling us they said it. An interim
-        // that reads as a wrong one may still be refined, so it waits for the
-        // final — a mis-hear must never cost a rung.
-        if(val === expected || matchesExpected(results, expected)){
+        // that reads as a wrong one may still be refined, so it waits.
+        if(matchesExpected(hypotheses, expected)){
+          clearTimeout(graceTimer);
           settle(expected, 'spoken');
           return;
         }
 
+        // The recorded answer always comes from the strict parse, never the
+        // phonetic fold, so a generous match can rescue a right answer but can
+        // never invent a wrong one.
+        const val = parseSpokenNumber(hypotheses[0]);
         if(!isFinal){
           if(!isNaN(val)) showProvisional(val);
           return;
@@ -2029,50 +2400,45 @@
           statusEl.innerHTML = `<span class="bad">${t('noNumber')}</span>`;
           return;
         }
-        settle(val, 'spoken');
-      };
-      rec.onerror = () => {};
-      rec.onend = () => { if(keepListening && !settled) setTimeout(startRecognition, 150); };
-
-      try {
-        rec.start();
-        startFailures = 0;
-      } catch(_) {
-        // start() throws while a previous session is still releasing the microphone.
-        // onend never fires for a start that failed, so without this retry the mic
-        // stays dead for the rest of the question.
-        activeRecognizer = null;
-        if(++startFailures <= 8) setTimeout(startRecognition, 300);
-        else statusEl.innerHTML = `<span class="bad">${t('micBusy')}</span>`;
+        showProvisional(val);
+        clearTimeout(graceTimer);
+        graceTimer = setTimeout(() => {
+          // Leaving the screen drops voiceControl, and a verdict must not arrive
+          // for a question nobody is looking at any more.
+          if(voiceControl === handle) settle(val, 'spoken');
+        }, WRONG_GRACE);
+      },
+      onTrouble(){ statusEl.textContent = t('netTrouble'); },
+      onFatal(kind){
+        statusEl.innerHTML = `<span class="bad">${t(kind === 'denied' ? 'micDenied' : 'micNoDevice')}</span>`;
+        if(inputEl) showKeypad(inputEl);   // the only way in now, so don't make them ask
       }
     };
 
-    voiceControl = {
-      // The language switch and unmuting need this: a running recognizer is locked
-      // to the language it started with. The keypad never stops the microphone.
+    const handle = {
+      // Unmuting and switching language both land here. The keypad never touches
+      // the microphone; only a language change cycles it, because a live session
+      // is locked to the language it opened with.
       restart(){
-        if(settled) return;
-        stopRecognizer();
-        if(!voiceAvailable()) return;
-        keepListening = true;
-        startFailures = 0;
+        if(settled || !voiceAvailable()) return;
+        VoiceEngine.retry();
+        VoiceEngine.listen(speech);
+        VoiceEngine.relang();
         statusEl.textContent = t('sayOrKeypad');
-        setTimeout(startRecognition, 120);
       }
     };
+    voiceControl = handle;
 
     // Armed before the availability check below, so that a question started while
-    // the mic is muted still has a handle for unmuting to bring voice back. Without
-    // that, muting and unmuting left the microphone dead for the whole question.
+    // the mic is muted still has a handle for unmuting to bring voice back.
     if(!voiceAvailable()){
       statusEl.textContent = t(micMuted ? 'micOffStatus' : 'tapKeys');
       if(inputEl) showKeypad(inputEl);   // the only way in, so don't make them ask
       return;
     }
 
-    keepListening = true;
+    VoiceEngine.listen(speech);
     statusEl.textContent = t('sayOrKeypad');
-    startRecognition();
 
     // Open the keypad the way they answered last time. Voice keeps running
     // underneath, so either route stays live and neither can wedge the other.
@@ -2144,7 +2510,9 @@
 
     const startBtn = document.getElementById('ladderSubmit');
     startBtn.textContent = t('start');
-    startBtn.onclick = () => askLadderQuestion(op);
+    // Priming here, on the tap, means the permission prompt and the handshake with
+    // the speech backend happen now rather than under the first question.
+    startBtn.onclick = () => { VoiceEngine.prime(); askLadderQuestion(op); };
     document.getElementById('answerInput').disabled = true;
   }
 
@@ -2283,13 +2651,15 @@
   micBtn.onclick = () => {
     setMicMuted(!micMuted, true);
     if(micMuted){
-      stopRecognizer();                       // silence it without ending the question
+      stopRecognizer();                       // hand the microphone back entirely
       const input = document.querySelector('.answer-input:not([disabled])');
       if(input) showKeypad(input);            // the only way in now, so open it
       const status = document.querySelector('.voice-status');
       if(status) status.textContent = t('micOffStatus');
     } else if(voiceControl){
-      voiceControl.restart();
+      voiceControl.restart();                 // re-arms the question that is in flight
+    } else {
+      VoiceEngine.retry();                    // nothing to arm, just warm it up again
     }
   };
 
@@ -2326,8 +2696,9 @@
   langBtn.onclick = () => {
     const next = LANGUAGES[(LANGUAGES.findIndex(l => l.code === speechLang) + 1) % LANGUAGES.length];
     setSpeechLang(next.code, true, true);
-    // A recognizer already running is locked to the old language, so cycle it.
+    // A session already running is locked to the old language, so cycle it.
     if(voiceControl) voiceControl.restart();
+    else VoiceEngine.relang();
   };
 
   // ================= ON-SCREEN KEYPAD =================

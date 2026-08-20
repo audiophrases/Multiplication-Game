@@ -95,21 +95,99 @@ The Challenge Quiz in Tables Adventure feeds the multiplication record, using wh
 
 ## Speech responsiveness
 
-The recogniser runs with `interimResults: true`, so the game sees hypotheses while the child is still speaking rather than waiting for Chrome to detect end-of-speech and finalise — which is where most of the perceived delay in a voice interface comes from.
+Hands-free is the point of this game, so the microphone is treated as something the
+page holds open rather than something a question borrows.
 
-Interim results are accepted **asymmetrically**, because this game scores one shot per question:
+### One microphone, not one per question
 
-- An interim that already reads as the **right** answer is accepted immediately. If the recogniser thinks they said it, they said it.
-- An interim that reads as a **wrong** answer is never acted on; it waits for the final result, since a partial hypothesis often gets refined ("fifty" becoming "fifty six"). Acting on it would cost a rung for a mis-hear.
+The `VoiceEngine` in `index.html` opens **a single recognizer and keeps it running
+across questions**. Questions arm and disarm a handler on it; they never build one.
 
-The effect is that correct answers land instantly and wrong ones get the recogniser's full, best attempt. Meanwhile the number being heard is shown greyed out as a provisional guess, so the child can see it is listening.
+This matters more than anything else here. Every `start()` opens a new connection to
+the browser's speech backend, and for the few hundred milliseconds that takes — often
+closer to a second on a Chromebook or a tablet on school wifi — the microphone is
+deaf. Building one per question meant the deaf window landed exactly where a child
+who answers straight away is speaking. The same thing happened *within* a question:
+with `continuous: false` a pause ends the session, so "umm… forty two" had the "umm"
+close it and the answer itself fall into the gap while the replacement connected.
 
-Two more things help with numbers specifically, which recognisers handle badly in isolation:
+So the engine runs `continuous: true` and stays open. It also has to survive
+browsers that end the session anyway, which Android Chrome does routinely:
 
-- **Digits and words are parsed together.** Chrome routinely returns a mixture for one number — `20 for` for twenty four, `fifty 6` for fifty six, `1 5` for fifteen. Several single digits in a row are read as the answer spelled out (`1 5` → 15); anything larger accumulates (`20 for` → 24).
-- **Several hypotheses are considered.** `maxAlternatives` is 5, and if *any* of them reads as the expected answer it is accepted. Chrome's top guess for an isolated number is often a homophone while its second is the number itself. This is only ever used to accept, never to reject, so a lucky alternative can rescue a correct answer but none can mark a wrong one right.
+- `onend` reopens immediately — by the time it fires the device is already released,
+  so there is nothing to wait for. A session that ends within 400ms of opening is
+  treated as failing rather than cycling, and backs off instead of spinning.
+- A `start()` that **throws** retries itself. Nothing calls `onend` for a start that
+  never began, so without this the microphone stays dead for the rest of the question.
+- A watchdog replaces a session that never reached `onstart`, or that has gone
+  completely silent, in case neither `onend` nor an error ever arrives.
+- `no-speech` and `aborted` are routine and silent. Reporting them was telling
+  children the microphone was broken every time they paused to think. `not-allowed`,
+  `audio-capture` and `network` each say something different and useful instead.
 
-Saying **"number twenty four"** also works — the word is ignored by the parser — so the extra context is available to anyone who wants it without being required.
+A `continuous` session accumulates every utterance it has ever heard, so the engine
+tracks a cursor and only hands a question the utterances that began *after* it was
+armed — a trailing final from the previous question can never answer the next one.
+It also goes deaf for half a second around the game's own chimes, which leave the
+speaker and arrive back at the microphone.
+
+The microphone is primed from the tap that starts a round, so the permission prompt
+and the handshake happen while the child is still reading the screen. Between
+questions it stays warm; a game left sitting on a menu for 20 seconds gives it back.
+
+Load the page with **`?voice=debug`** to see all of this on a real device: what the
+microphone is doing, every hypothesis as it arrives, and how long each took to land.
+
+### Accepting an answer
+
+`interimResults: true` means hypotheses arrive while the child is still speaking,
+rather than after the browser has decided the utterance ended. They are accepted
+**asymmetrically**, because this game scores one shot per question:
+
+- An interim that already reads as the **right** answer is accepted immediately. If
+  the recogniser thinks they said it, they said it.
+- An interim that reads as a **wrong** answer is never acted on; it waits for the
+  final, since a partial hypothesis often gets refined ("fifty" becoming "fifty six").
+- A **final** wrong answer gets a 700ms grace window before it counts. Recognisers
+  revise their own guess, and a child who sees themselves misheard says the number
+  again straight away. Both arrive inside that window, and both used to cost a rung.
+
+Meanwhile the number being heard is shown greyed out as a provisional guess, so the
+child can see it is listening.
+
+### Reading numbers out of a transcript
+
+Recognisers handle isolated numbers badly, so `parseSpokenNumber` has two readings.
+
+The **strict** reading takes known number words and digits only, and it is the one
+that gets recorded as the player's answer:
+
+- **Digits and words are parsed together.** Chrome routinely returns a mixture for
+  one number — `20 for` for twenty four, `fifty 6` for fifty six, `42nd` for forty
+  two. Several single digits in a row are read as the answer spelled out (`1 5` → 15);
+  anything larger accumulates (`20 for` → 24).
+- **Homophones are folded in**, because `won`, `ate` and `for` come back constantly.
+- Saying **"number twenty four"** works too — the word is ignored — so the extra
+  context is available to anyone who wants it without being required.
+
+The **forgiving** reading adds a phonetic rescue, and is used **only ever to accept**:
+
+- A crude fold maps the ways English and Catalan spell the same sound onto one key,
+  so `sexty` reaches sixty and `cuaranta` reaches quaranta. It is consulted only for
+  words that are not already number words, within a tight edit budget, and a sound
+  caught between two numbers resolves to **neither** — half the tens are two edits
+  apart, and guessing between them is how a child loses a rung they had won.
+- Words the recogniser runs together are pulled apart: `fortytwo`, `quarantados`,
+  `vintiun`.
+- It needs an **anchor** — something in the utterance that already read as a number,
+  or a single-word utterance, which is what an answer actually looks like. Without
+  that, passing chatter starts resolving to numbers nobody said.
+
+`maxAlternatives` is 5, and if *any* hypothesis reads as the expected answer under
+either reading, it is accepted. Chrome's top guess for an isolated number is often a
+homophone while its second is the number itself. Because the recorded value always
+comes from the **strict** reading, a generous match can rescue a correct answer but
+can never invent a wrong one or put a number in the history that was never said.
 
 ## Translations
 
@@ -131,6 +209,6 @@ npm install
 npm test
 ```
 
-The tests read the difficulty model, the number parser and the keypad ordering directly out of `index.html`, so the game stays a single self-contained file with no duplicated logic. The ladder suite runs its checks against all four operations.
+The tests read the difficulty model, the number parser, the voice engine and the keypad ordering directly out of `index.html`, so the game stays a single self-contained file with no duplicated logic. The ladder suite runs its checks against all four operations, and the voice engine suite drives the real engine with a fake recogniser — sessions the browser ends, starts that throw, refused microphones, and utterances arriving between questions.
 
 Enjoy sharpening your math skills!
