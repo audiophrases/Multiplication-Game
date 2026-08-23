@@ -534,7 +534,8 @@
 
   const LANGUAGES = [
     { code:'en-US', label:'EN', name:'English' },
-    { code:'ca-ES', label:'CA', name:'Català' }
+    { code:'ca-ES', label:'CA', name:'Català' },
+    { code:'fr-FR', label:'FR', name:'Français' }
   ];
   const LANG_KEY = 'mulSpeechLang';
   let speechLang = 'en-US';
@@ -789,6 +790,118 @@
       playAgain:'Torna a jugar',
       celebrations:["Molt bé!","Ben fet!","Fantàstic!","Ets increïble!",
                     "Continua així!","Bravo!","Excel·lent!","Ets una estrella!"]
+    },
+
+    'fr-FR': {
+      appName:'Manie des Nombres', progressBtn:'Mes progrès', resetBtn:'Effacer les progrès',
+      headerRung:(icon,r,total,best)=>`${icon} Barreau ${r} sur ${total} — record ${best}`,
+      headerLevel:n=>`Niveau : ${n}`,
+
+      voiceLangTitle:name=>`Langue : ${name} — touche pour changer`,
+      voiceLangLabel:name=>`Langue : ${name}`,
+      fullscreen:'Plein écran', exitFullscreen:'Quitter le plein écran',
+      micMute:'Couper le microphone', micUnmute:'Rallumer le microphone',
+      micOffStatus:'Microphone coupé — utilise le clavier.',
+
+      keypadLabel:'Clavier numérique', send:'Envoyer', deleteDigit:'Effacer le dernier chiffre',
+      unitsFirstOn:"⇠ Unités d'abord — OUI", unitsFirstOff:"⇠ Unités d'abord — non",
+
+      homeTitle:"On s'entraîne à quoi ?",
+      homeSubtitle:'Dis ta réponse ou tape-la : les deux marchent partout.',
+      bestSoFar:(best,total)=>`Record : barreau ${best} sur ${total}.`,
+      notStarted:'Pas encore commencé.',
+
+      'op.add.name':'Additions',      'op.add.short':'Addition',
+      'op.sub.name':'Soustractions',  'op.sub.short':'Soustraction',
+      'op.mul.name':'Multiplications','op.mul.short':'Multiplication',
+      'op.div.name':'Divisions',      'op.div.short':'Division',
+      'op.mix.name':'Tout',           'op.mix.short':'Tout',
+      'op.add.blurb':"Additionner, de 1 + 1 jusqu'aux retenues sur trois chiffres.",
+      'op.sub.blurb':'Soustraire, avec les retenues à travers les colonnes.',
+      'op.mul.blurb':"Toutes les tables mélangées, jusqu'aux calculs à deux chiffres comme 25 × 46.",
+      'op.div.blurb':'Partager exactement — chaque réponse est un nombre entier.',
+      'op.mix.blurb':"Les quatre ensemble — surtout des additions en bas, surtout des divisions en haut. Ça démarre à mi-hauteur, ce n'est pas une première montée.",
+
+      ladderName:"L'Échelle",
+      ladderDesc:total=>`${total} barreaux de plus en plus durs. Bonne réponse, tu montes ; mauvaise réponse, tu descends d'un — tu n'es jamais éliminé.`,
+      resumeRung:r=>` Tu es au barreau ${r}.`,
+      tablesName:'Aventure des Tables',
+      tablesDesc:"Choisis ou tire une table au sort, puis travaille-la de l'addition jusqu'au quiz chronométré.",
+      allSections:'← Toutes les sections',
+      confirmClimb:r=>`Reprendre la montée au barreau ${r} ?`,
+      confirmLevel:n=>`Reprendre au niveau ${n} ?`,
+      confirmReset:"Effacer les progrès, les temps enregistrés et ce que l'échelle a appris sur toi ?",
+
+      ladderTitle:(icon,short)=>`${icon} Échelle — ${short}`,
+      ladderSubtitle:"Bonne réponse, tu montes d'un barreau ; mauvaise, tu en descends un — jamais éliminé.",
+      ready:'Prêt ?', yourAnswer:'Ta réponse :', heard:'Entendu :',
+      pressStart:'Appuie sur Commencer.', pressStartShort:'Appuie sur Commencer',
+      start:'Commencer', check:'Vérifier', menu:'Menu', close:'Fermer', continueBtn:'Continuer',
+      rungOf:(r,total)=>`Barreau ${r} sur ${total}`,
+      'zone.Ground':'Sol',   'zone.Lower':'Basse', 'zone.Middle':'Milieu',
+      'zone.Upper':'Haute',  'zone.Summit':'Sommet',
+
+      sayOrKeypad:'Dis ta réponse ou utilise le clavier — la première compte.',
+      keypadOpen:'Clavier ouvert — appuie sur Envoyer quand tu es prêt.',
+      noNumber:"Je n'ai pas entendu de nombre — redis-le.",
+      tapKeys:'Appuie sur les touches, puis Envoyer.',
+      listening:"J'écoute...",
+      netTrouble:'Connexion perdue — le clavier marche toujours.',
+      micDenied:'Le microphone est bloqué. Autorise-le dans ton navigateur ou utilise le clavier.',
+      micNoDevice:'Aucun microphone trouvé — utilise le clavier.',
+      typedCorrect:v=>`Tu as écrit ${v}. Correct !`,
+      heardCorrect:(txt,v)=>`Entendu « ${txt} » → ${v}. Correct !`,
+      heardWrong:(txt,v)=>`Entendu « ${txt} »${v===null?'':` → ${v}`} — réessaie.`,
+      tryAgain:v=>`${v} — réessaie.`,
+      sayOrType:v=>`Dis ou écris « ${v} »`,
+      sayOrTypeMoveOn:v=>`Dis ou écris « ${v} » pour continuer.`,
+
+      atTheTop:'Tu es tout en haut !',
+      correctUpTo:r=>`Correct — tu montes au barreau ${r} !`,
+      correctIntoZone:z=>`Correct — te voilà dans la zone ${z} !`,
+      downToRung:r=>`Tu descends au barreau ${r}.`,
+      stayOnRung1:'Tu restes au barreau 1.',
+      summitTitle:short=>`🏔️ Tu as vaincu l'échelle : ${short.toLowerCase()} ! 🏔️`,
+      summitBody:total=>`Les ${total} barreaux sont grimpés.`,
+      summit:'Sommet !', climbAgain:'Remonter',
+
+      fastestFinishes:'Les plus rapides', noTimes:'Aucun temps enregistré pour le moment.',
+      hsEntry:(init,table,secs,date)=>`${init} — table de ${table} en ${secs}s (${date})`,
+      trickyTitle:'Difficiles pour toi',
+      trickyNone:"Rien pour l'instant — elles apparaissent quand tu rates une opération plusieurs fois.",
+      trickyIntro:"Elles sont placées plus haut sur l'échelle pour que tu les rencontres plus souvent.",
+      trickyLine:(label,misses,tries)=>`${label} — ${misses} ratées sur ${tries}`,
+      voiceOffTitle:'Commande vocale indisponible',
+      voiceOffBody:'Ton navigateur a besoin de la reconnaissance vocale (essaie Chrome ou Edge). Tu peux quand même jouer avec le clavier.',
+
+      chooseTable:'Choisis une table de multiplication',
+      chooseTableSub:'Commence où tu veux. Tu pourras toujours tourner la roue plus tard !',
+      selectTable:'Choisis une table pour commencer.',
+      spinInstead:'Tourner la roue plutôt',
+      tableSelected:v=>`Table de ${v} choisie`,
+      listenNoTyping:'On écoutera tes réponses — ou utilise le clavier.',
+      startPracticing:"Commencer l'entraînement",
+      spinTitle:'Tourne la roue pour choisir une table',
+      spinSub:"Toutes les tables jusqu'à 10 t'attendent. Touche la roue et prépare-toi à parler !",
+      spinBtn:'Tourner la roue',
+      tablePicked:p=>`🎉 Table de ${p} ! 🎉`, go:'Partez !',
+      practiceAdding:n=>`Entraîne-toi à ajouter ${n}`,
+      greatNext:'Super ! La suivante arrive...',
+      fillNext:n=>`Remplissons quelques trous pour ${n}.`,
+      fillTitle:(n,count)=>`Table de ${n} — remplis ${count} trous`,
+      fillSub:'Écris ou dis les réponses manquantes.',
+      niceBlank:'Bien ! Voici le trou suivant...',
+      quizTitle:n=>`Table de ${n} — quiz défi`,
+      quizSub:'Dis ou écris chaque réponse.',
+      correctNext:'Correct ! Question suivante...',
+      initialsPrompt:'Entre tes initiales pour enregistrer ton temps :',
+      totalTime:s=>`Temps total : ${s}s`,
+      nextLevel:'Niveau suivant',
+      winTitle:'🎉 Tu as gagné ! 🎉', winBody:'Tu as fini toutes les tables !',
+      congrats:'Félicitations !', congratsBody:'Beau travail, tu maîtrises tes tables.',
+      playAgain:'Rejouer',
+      celebrations:["Bravo !","Bien joué !","Fantastique !","Tu es incroyable !",
+                    "Continue comme ça !","Super !","Excellent travail !","Tu es une star !"]
     }
   };
 
@@ -1216,13 +1329,35 @@
       vint:20, trenta:30, quaranta:40, cinquanta:50, seixanta:60, setanta:70,
       vuitanta:80, huitanta:80, noranta:90,
       cent:100, cents:100, centes:100, mil:1000
+    },
+    'fr-FR': {
+      zero:0, zéro:0,
+      un:1, une:1, uns:1, deux:2, trois:3, quatre:4, cinq:5, six:6, sept:7,
+      huit:8, neuf:9, dix:10,
+      // Seventeen to nineteen and seventy to ninety-nine are built out of these
+      // rather than listed: dix-sept is ten and seven, soixante-douze is sixty and
+      // twelve. Only quatre-vingt breaks the pattern, and SCORE_LANGS handles it.
+      onze:11, douze:12, treize:13, quatorze:14, quinze:15, seize:16,
+      vingt:20, vingts:20, trente:30, quarante:40, cinquante:50, soixante:60,
+      // Belgian and Swiss forms. A child may well use them, and a recogniser set
+      // to fr-FR will still hand them back when they do.
+      septante:70, octante:80, huitante:80, nonante:90,
+      cent:100, cents:100, mille:1000, milles:1000, mil:1000
     }
   };
 
-  // "i" joins tens to units in Catalan (vint-i-un); "and" does the same in English.
+  // French counts in twenties above sixty: quatre-vingt-douze is four twenties and
+  // twelve. Nowhere else here works that way, and reading "four twenty" as eighty
+  // in English would turn a spelled-out 420 into 80.
+  const SCORE_LANGS = { 'fr-FR': true };
+
+  // "i" joins tens to units in Catalan (vint-i-un), "et" does it in French
+  // (vingt-et-un), and "and" does the same in English.
   // "number" and "número" are here so a child may say "number twenty four" for the
   // extra context it gives the recogniser, without the prefix being required.
-  const NUMBER_JOINERS = new Set(['i', 'and', 'y', 'number', 'numero', 'número', 'nombre']);
+  const NUMBER_JOINERS = new Set([
+    'i', 'and', 'y', 'et', 'number', 'numero', 'número', 'nombre'
+  ]);
 
   // A deliberately crude phonetic fold. It maps the ways these two languages spell
   // the same sound onto one key, so a mis-heard word can still be recognised as the
@@ -1337,15 +1472,16 @@
   // that was never said.
   function parseSpokenNumber(text, lang, opts){
     if(!text) return NaN;
-    const map = NUMBER_WORDS[lang || speechLang] || NUMBER_WORDS['en-US'];
+    const code = NUMBER_WORDS[lang || speechLang] ? (lang || speechLang) : 'en-US';
+    const map = NUMBER_WORDS[code];
 
     // Digits and words are tokenised together. Chrome regularly returns a mixture —
     // "20 for" for twenty four, "fifty 6" for fifty six, "42nd" for forty two — and
     // reading only the first digit run, as this used to, threw away the rest.
     const tokens = text.toLowerCase()
-      .replace(/[^0-9a-zàèéíòóúïüç\s-]/g, ' ')
-      .replace(/(\d)([a-zàèéíòóúïüç])/g, '$1 $2')
-      .replace(/([a-zàèéíòóúïüç])(\d)/g, '$1 $2')
+      .replace(/[^0-9a-zàâäèéêëîïôöùûüíòóúçœ\s-]/g, ' ')
+      .replace(/(\d)([a-zàâäèéêëîïôöùûüíòóúçœ])/g, '$1 $2')
+      .replace(/([a-zàâäèéêëîïôöùûüíòóúçœ])(\d)/g, '$1 $2')
       .split(/[\s-]+/)
       .filter(Boolean);
 
@@ -1386,7 +1522,8 @@
       return parseInt(values.join(''), 10);
     }
 
-    let total = 0, current = 0;
+    const scores = !!SCORE_LANGS[code];
+    let total = 0, current = 0, previous = null;
     values.forEach(val => {
       if(val === 1000){
         total += Math.max(1, current) * 1000;   // "tres mil" / "three thousand"
@@ -1395,9 +1532,14 @@
         current = Math.max(1, current) * 100;   // "dos-cents" / "two hundred"
       } else if(val >= 1000){
         total += val;                           // already a whole number, e.g. "1150"
+      } else if(scores && val === 20 && previous === 4){
+        // quatre-vingts. The four has already been added, so it is taken back out
+        // and the score put in its place: "deux cent quatre-vingts" is 280, not 224.
+        current = current - 4 + 80;
       } else {
         current += val;
       }
+      previous = val;
     });
     return total + current;
   }

@@ -19,9 +19,11 @@ function loadParser(){
 const { parseSpokenNumber, NUMBER_WORDS, matchesExpected, phoneticFold, fuzzyWordValue, setLang } = loadParser();
 const en = t => parseSpokenNumber(t, 'en-US');
 const ca = t => parseSpokenNumber(t, 'ca-ES');
+const fr = t => parseSpokenNumber(t, 'fr-FR');
 // The forgiving reading, the one only ever used to accept an answer.
 const enF = t => parseSpokenNumber(t, 'en-US', { fuzzy: true });
 const caF = t => parseSpokenNumber(t, 'ca-ES', { fuzzy: true });
+const frF = t => parseSpokenNumber(t, 'fr-FR', { fuzzy: true });
 
 describe('digits', () => {
   test('a spoken number returned as digits wins outright, in any language', () => {
@@ -159,7 +161,7 @@ describe('mixed digit and word transcripts', () => {
 
 describe('the two languages stay separate', () => {
   test('both cover every digit a product can be spoken with', () => {
-    ['en-US', 'ca-ES'].forEach(lang => {
+    ['en-US', 'ca-ES', 'fr-FR'].forEach(lang => {
       const values = new Set(Object.values(NUMBER_WORDS[lang]));
       for(let n = 0; n <= 10; n++) expect(values).toContain(n);
       [20, 30, 40, 50, 60, 70, 80, 90, 100, 1000].forEach(n => expect(values).toContain(n));
@@ -184,7 +186,7 @@ describe('the phonetic fold', () => {
   });
 
   test('different numbers never fold onto one key', () => {
-    ['en-US', 'ca-ES'].forEach(lang => {
+    ['en-US', 'ca-ES', 'fr-FR'].forEach(lang => {
       const byFold = new Map();
       Object.entries(NUMBER_WORDS[lang]).forEach(([word, value]) => {
         const key = phoneticFold(word);
@@ -315,5 +317,172 @@ describe('accepting an answer', () => {
         expect(matchesExpected([String(spoken)], expected)).toBe(false);
       });
     });
+  });
+});
+
+describe('French', () => {
+  test('units and teens', () => {
+    expect(fr('sept')).toBe(7);
+    expect(fr('huit')).toBe(8);
+    expect(fr('neuf')).toBe(9);
+    expect(fr('seize')).toBe(16);
+    expect(fr('zéro')).toBe(0);
+  });
+
+  test('the teens above sixteen are built, not listed', () => {
+    expect(fr('dix-sept')).toBe(17);
+    expect(fr('dix-huit')).toBe(18);
+    expect(fr('dix-neuf')).toBe(19);
+  });
+
+  test('the "et" joiner is not mistaken for a number', () => {
+    expect(fr('vingt et un')).toBe(21);
+    expect(fr('vingt-et-un')).toBe(21);
+    expect(fr('trente et un')).toBe(31);
+  });
+
+  test('the seventies count on from sixty', () => {
+    expect(fr('soixante-dix')).toBe(70);
+    expect(fr('soixante et onze')).toBe(71);
+    expect(fr('soixante-douze')).toBe(72);
+    expect(fr('soixante-dix-neuf')).toBe(79);
+  });
+
+  // The one place French stops being additive, and the only reason SCORE_LANGS
+  // exists: quatre-vingt is four twenties, not four and twenty.
+  test('the eighties and nineties count in twenties', () => {
+    expect(fr('quatre-vingts')).toBe(80);
+    expect(fr('quatre-vingt')).toBe(80);
+    expect(fr('quatre-vingt-un')).toBe(81);
+    expect(fr('quatre-vingt-dix')).toBe(90);
+    expect(fr('quatre-vingt-douze')).toBe(92);
+    expect(fr('quatre-vingt-dix-neuf')).toBe(99);
+  });
+
+  test('a score inside a bigger number does not swallow what came before it', () => {
+    expect(fr('cent quatre-vingts')).toBe(180);
+    expect(fr('deux cent quatre-vingts')).toBe(280);
+    expect(fr('deux cent quatre-vingt-quatorze')).toBe(294);
+  });
+
+  test('plain twenties are still plain twenties', () => {
+    expect(fr('vingt')).toBe(20);
+    expect(fr('vingt-quatre')).toBe(24);
+    expect(fr('quatre')).toBe(4);
+    expect(fr('quarante-quatre')).toBe(44);
+  });
+
+  test('hundreds and thousands', () => {
+    expect(fr('cent')).toBe(100);
+    expect(fr('cent vingt')).toBe(120);
+    expect(fr('cent quarante-quatre')).toBe(144);
+    expect(fr('deux cent cinquante')).toBe(250);
+    expect(fr('trois mille deux cents')).toBe(3200);
+    expect(fr('mille cent cinquante')).toBe(1150);
+  });
+
+  test('Belgian and Swiss tens are understood too', () => {
+    expect(fr('septante')).toBe(70);
+    expect(fr('septante-deux')).toBe(72);
+    expect(fr('huitante')).toBe(80);
+    expect(fr('nonante-neuf')).toBe(99);
+  });
+
+  test('nothing numeric gives NaN', () => {
+    expect(fr('bonjour')).toBeNaN();
+  });
+
+  test('French mixes digits and words too', () => {
+    expect(fr('20 et 4')).toBe(24);
+    expect(fr('cinquante 6')).toBe(56);
+    expect(fr('la réponse est 56')).toBe(56);
+  });
+
+  test('counting in twenties is French and stays French', () => {
+    // "four twenty" in English is a spelled-out 420, not eighty.
+    expect(en('four twenty')).toBe(24);
+    expect(ca('quatre vint')).toBe(24);
+  });
+});
+
+describe('the French forgiving reading', () => {
+  test('near misses the recogniser really returns still resolve', () => {
+    expect(frF('quarante deux')).toBe(42);
+    expect(frF('carante deux')).toBe(42);
+    expect(frF('sinquante six')).toBe(56);
+  });
+
+  test('words run together are pulled apart', () => {
+    expect(frF('quarantedeux')).toBe(42);
+    expect(frF('vingtetun')).toBe(21);
+    expect(frF('quatrevingts')).toBe(80);
+  });
+
+  test('passing chatter is not turned into a number', () => {
+    expect(frF('bonjour comment ça va')).toBeNaN();
+    expect(frF('je ne sais pas du tout')).toBeNaN();
+  });
+
+  test('it never loosens the strict reading', () => {
+    expect(fr('carante deux')).toBe(2);
+    expect(fr('quarantedeux')).toBeNaN();
+  });
+
+  test('a clean transcript reads the same either way', () => {
+    ['56', 'quarante-deux', 'quatre-vingt-douze', 'cent quarante-quatre'].forEach(txt => {
+      expect(frF(txt)).toBe(fr(txt));
+    });
+  });
+});
+
+describe('accepting a French answer', () => {
+  afterEach(() => setLang('en-US'));
+
+  test('every fact in the tables can be accepted when said plainly', () => {
+    const units = ['zéro','un','deux','trois','quatre','cinq','six','sept','huit','neuf'];
+    const teens = ['dix','onze','douze','treize','quatorze','quinze','seize',
+                   'dix-sept','dix-huit','dix-neuf'];
+    const say = n => {
+      if(n < 10) return units[n];
+      if(n < 20) return teens[n - 10];
+      if(n < 70){
+        const tens = { 2:'vingt', 3:'trente', 4:'quarante', 5:'cinquante', 6:'soixante' };
+        const t = tens[Math.floor(n / 10)], u = n % 10;
+        return u === 0 ? t : u === 1 ? `${t} et un` : `${t}-${units[u]}`;
+      }
+      if(n < 80) return n === 71 ? 'soixante et onze' : `soixante-${say(n - 60)}`;
+      if(n < 100) return n === 80 ? 'quatre-vingts' : `quatre-vingt-${say(n - 80)}`;
+      const hundreds = Math.floor(n / 100), rest = n % 100;
+      const head = hundreds === 1 ? 'cent' : `${units[hundreds]} cent${rest ? '' : 's'}`;
+      return rest ? `${head} ${say(rest)}` : head;
+    };
+    setLang('fr-FR');
+    for(let a = 1; a <= 12; a++){
+      for(let b = 1; b <= 12; b++){
+        const answer = a * b;
+        expect({ [say(answer)]: parseSpokenNumber(say(answer), 'fr-FR') })
+          .toEqual({ [say(answer)]: answer });
+        expect(matchesExpected([say(answer)], answer)).toBe(true);
+      }
+    }
+  });
+
+  test('a different number is never accepted as the answer', () => {
+    setLang('fr-FR');
+    expect(matchesExpected(['quarante-trois'], 42)).toBe(false);
+    expect(matchesExpected(['vingt-quatre'], 42)).toBe(false);
+    expect(matchesExpected(['quatre-vingts'], 24)).toBe(false);
+    expect(matchesExpected(['soixante-dix'], 60)).toBe(false);
+  });
+
+  test('no product is accepted as any other product', () => {
+    setLang('fr-FR');
+    const seen = new Set();
+    for(let a = 1; a <= 12; a++) for(let b = 1; b <= 12; b++) seen.add(a * b);
+    const answers = [...seen];
+    answers.forEach(spoken => answers.forEach(expected => {
+      if(spoken === expected) return;
+      expect(matchesExpected([String(spoken)], expected)).toBe(false);
+    }));
   });
 });

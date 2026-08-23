@@ -15,7 +15,7 @@ A small web-based game for practising arithmetic — **sums, subtractions, multi
 3. Each challenge begins when you press its **Start** button. Answers can be spoken or typed.
 
    - **🎤 / 🔇** (top right) mutes the microphone. Muted, it turns red and the keypad opens by itself, since it becomes the only way in. The setting is remembered.
-   - **🌐 EN / CA** (top right) switches language. It changes both the speech recognition **and the whole interface** — a child answering in Catalan should be reading Catalan. Both languages understand spoken number words as well as digits, including Catalan compounds like `vint-i-un` and `dos-cents cinquanta`. The choice is remembered.
+   - **🌐 EN / CA / FR** (top right) cycles the language. It changes both the speech recognition **and the whole interface** — a child answering in Catalan should be reading Catalan. All three understand spoken number words as well as digits, including Catalan compounds like `vint-i-un` and `dos-cents cinquanta`, and French ones like `vingt-et-un` and `quatre-vingt-douze`. The choice is remembered.
    - **⛶** (top right) is fullscreen focus mode: it strips away the header, footer and other chrome so only the question remains. Where the browser refuses true fullscreen (iOS Safari), the stripped-back layout still applies.
    - Tapping the answer box opens an on-screen keypad with a **Send** button. The microphone keeps listening the whole time, so either route works and the first answer counts whichever way it arrives. On a phone or tablet the box never takes focus, so the device's own keyboard stays out of the way.
    - **⇠ Units first** on the keypad reverses digit entry, so an answer can be typed in the order written arithmetic produces it — right to left. With it on, `34 × 68 = 2312` is entered `2`, `1`, `3`, `2`. Backspace still undoes the digit you pressed last.
@@ -169,10 +169,16 @@ that gets recorded as the player's answer:
 - **Homophones are folded in**, because `won`, `ate` and `for` come back constantly.
 - Saying **"number twenty four"** works too — the word is ignored — so the extra
   context is available to anyone who wants it without being required.
+- **French counts in twenties.** `quatre-vingt-douze` is four twenties and twelve,
+  the one place the language stops being additive. `SCORE_LANGS` marks the languages
+  that do this, so `four twenty` in English stays a spelled-out 420 rather than 80.
+  Everything else builds compositionally — `dix-sept` is ten and seven,
+  `soixante-douze` is sixty and twelve — and the Belgian and Swiss `septante`,
+  `huitante` and `nonante` are understood too.
 
 The **forgiving** reading adds a phonetic rescue, and is used **only ever to accept**:
 
-- A crude fold maps the ways English and Catalan spell the same sound onto one key,
+- A crude fold maps the ways these three languages spell the same sound onto one key,
   so `sexty` reaches sixty and `cuaranta` reaches quaranta. It is consulted only for
   words that are not already number words, within a tight edit budget, and a sound
   caught between two numbers resolves to **neither** — half the tens are two edits
@@ -196,9 +202,12 @@ Every interface string lives in `STRINGS` in `index.html`, keyed by language. Va
 ```js
 rungOf: (r, total) => `Rung ${r} of ${total}`      // en-US
 rungOf: (r, total) => `Graó ${r} de ${total}`      // ca-ES
+rungOf: (r, total) => `Barreau ${r} sur ${total}`  // fr-FR
 ```
 
-To add a language, add a key to `LANGUAGES` (with its speech-recognition locale) and a matching block to `STRINGS`. Anything a translation omits falls back to English, so a missing key shows a real sentence rather than a raw identifier. The tests check that both tables have the same keys, that each key is the same *kind* of value in both (string, list or function of the same arity), and that no prose was left as an untranslated copy of the English.
+To add a language, add a key to `LANGUAGES` (with its speech-recognition locale), a matching block to `STRINGS`, and its number words to `NUMBER_WORDS`. Anything a translation omits falls back to English, so a missing key shows a real sentence rather than a raw identifier.
+
+The tests run over **every** language, not just the first: same keys as English, each key the same *kind* of value (string, list or function of the same arity), and no prose left as an untranslated copy of the English. A language may declare **cognates** — words it genuinely shares, like French `Division` — but only per language, and a further test fails any cognate that is no longer identical, so the list cannot quietly become a place to hide untranslated prose.
 
 Switching language redraws the current screen. Mid-activity screens in Tables Adventure deliberately do not redraw — the chrome updates and the new language takes effect at the next screen, rather than restarting a run the player is part-way through.
 

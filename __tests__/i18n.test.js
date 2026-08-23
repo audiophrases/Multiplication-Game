@@ -14,46 +14,73 @@ function loadStrings(){
 const { STRINGS, t, setLang } = loadStrings();
 const LANGS = Object.keys(STRINGS);
 const EN = STRINGS['en-US'];
+// English is the table every other one is measured against, so it is not itself a
+// translation. Every check below runs over all of these, not just the first one.
+const TRANSLATIONS = LANGS.filter(l => l !== 'en-US');
+
+// Words a language genuinely shares with English. Kept per language, so a real
+// untranslated string can never hide behind another language's cognate.
+const COGNATES = {
+  'ca-ES': ['op.div.name'],
+  'fr-FR': ['op.add.short', 'op.mul.name', 'op.mul.short',
+            'op.div.name', 'op.div.short', 'menu']
+};
 
 describe('the translation tables', () => {
-  test('both languages are present', () => {
-    expect(LANGS.sort()).toEqual(['ca-ES', 'en-US']);
+  test('every language the button offers is present', () => {
+    expect(LANGS.sort()).toEqual(['ca-ES', 'en-US', 'fr-FR']);
   });
 
-  test('Catalan covers every English key', () => {
-    const missing = Object.keys(EN).filter(k => STRINGS['ca-ES'][k] === undefined);
-    expect(missing).toEqual([]);
-  });
-
-  test('Catalan adds no keys English does not have', () => {
-    const extra = Object.keys(STRINGS['ca-ES']).filter(k => EN[k] === undefined);
-    expect(extra).toEqual([]);
-  });
-
-  test('a key is the same kind of thing in both languages', () => {
-    const mismatched = Object.keys(EN).filter(k => {
-      const a = EN[k], b = STRINGS['ca-ES'][k];
-      if(typeof a !== typeof b) return true;
-      if(Array.isArray(a) !== Array.isArray(b)) return true;
-      if(typeof a === 'function' && a.length !== b.length) return true;   // same arity
-      return false;
+  test('every translation covers every English key', () => {
+    TRANSLATIONS.forEach(l => {
+      const missing = Object.keys(EN).filter(k => STRINGS[l][k] === undefined);
+      expect({ [l]: missing }).toEqual({ [l]: [] });
     });
-    expect(mismatched).toEqual([]);
+  });
+
+  test('no translation adds keys English does not have', () => {
+    TRANSLATIONS.forEach(l => {
+      const extra = Object.keys(STRINGS[l]).filter(k => EN[k] === undefined);
+      expect({ [l]: extra }).toEqual({ [l]: [] });
+    });
+  });
+
+  test('a key is the same kind of thing in every language', () => {
+    TRANSLATIONS.forEach(l => {
+      const mismatched = Object.keys(EN).filter(k => {
+        const a = EN[k], b = STRINGS[l][k];
+        if(typeof a !== typeof b) return true;
+        if(Array.isArray(a) !== Array.isArray(b)) return true;
+        if(typeof a === 'function' && a.length !== b.length) return true;   // same arity
+        return false;
+      });
+      expect({ [l]: mismatched }).toEqual({ [l]: [] });
+    });
   });
 
   test('nothing is left as an untranslated copy of the English', () => {
-    // Proper nouns and symbols are allowed to match; prose is not.
-    const allowed = new Set(['op.div.name', 'summit', 'go']);
-    const identical = Object.keys(EN).filter(k => {
-      if(allowed.has(k) || typeof EN[k] !== 'string') return false;
-      return EN[k] === STRINGS['ca-ES'][k] && /[a-z]{4}/i.test(EN[k]);
+    TRANSLATIONS.forEach(l => {
+      const allowed = new Set(COGNATES[l] || []);
+      const identical = Object.keys(EN).filter(k => {
+        if(allowed.has(k) || typeof EN[k] !== 'string') return false;
+        return EN[k] === STRINGS[l][k] && /[a-z]{4}/i.test(EN[k]);
+      });
+      expect({ [l]: identical }).toEqual({ [l]: [] });
     });
-    expect(identical).toEqual([]);
   });
 
-  test('both celebration lists are non-empty and the same length', () => {
+  test('a listed cognate really is one, not a stale exemption', () => {
+    // Otherwise the list quietly becomes a place to hide untranslated prose.
+    TRANSLATIONS.forEach(l => {
+      const stale = (COGNATES[l] || []).filter(k => EN[k] !== STRINGS[l][k]);
+      expect({ [l]: stale }).toEqual({ [l]: [] });
+    });
+  });
+
+  test('every celebration list is non-empty and the same length', () => {
     LANGS.forEach(l => expect(STRINGS[l].celebrations.length).toBeGreaterThan(0));
-    expect(STRINGS['ca-ES'].celebrations).toHaveLength(EN.celebrations.length);
+    TRANSLATIONS.forEach(l =>
+      expect(STRINGS[l].celebrations).toHaveLength(EN.celebrations.length));
   });
 });
 
@@ -63,6 +90,8 @@ describe('lookup', () => {
   test('returns the active language', () => {
     setLang('ca-ES');
     expect(t('start')).toBe('Comença');
+    setLang('fr-FR');
+    expect(t('start')).toBe('Commencer');
     setLang('en-US');
     expect(t('start')).toBe('Start');
   });
@@ -72,6 +101,8 @@ describe('lookup', () => {
     expect(t('rungOf', 7, 30)).toBe('Rung 7 of 30');
     setLang('ca-ES');
     expect(t('rungOf', 7, 30)).toBe('Graó 7 de 30');
+    setLang('fr-FR');
+    expect(t('rungOf', 7, 30)).toBe('Barreau 7 sur 30');
   });
 
   test('an unknown key returns itself rather than throwing', () => {
@@ -99,12 +130,14 @@ describe('lookup', () => {
     });
   });
 
-  test('every zone name is translated', () => {
-    ['Ground','Lower','Middle','Upper','Summit'].forEach(z => {
-      setLang('ca-ES');
-      const ca = t('zone.' + z);
-      expect(typeof ca).toBe('string');
-      expect(ca.length).toBeGreaterThan(1);
+  test('every zone name is translated in every language', () => {
+    TRANSLATIONS.forEach(l => {
+      setLang(l);
+      ['Ground','Lower','Middle','Upper','Summit'].forEach(z => {
+        const name = t('zone.' + z);
+        expect(typeof name).toBe('string');
+        expect(name.length).toBeGreaterThan(1);
+      });
     });
   });
 });
