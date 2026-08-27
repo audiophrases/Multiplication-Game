@@ -17,7 +17,7 @@ A small web-based game for practising arithmetic — **sums, subtractions, multi
    - **🎤 / 🔇** (top right) mutes the microphone. Muted, it turns red and the keypad opens by itself, since it becomes the only way in. The setting is remembered.
    - **🌐 EN / CA / FR** (top right) cycles the language. It changes both the speech recognition **and the whole interface** — a child answering in Catalan should be reading Catalan. All three understand spoken number words as well as digits, including Catalan compounds like `vint-i-un` and `dos-cents cinquanta`, and French ones like `vingt-et-un` and `quatre-vingt-douze`. The choice is remembered.
    - **⛶** (top right) is fullscreen focus mode: it strips away the header, footer and other chrome so only the question remains. Where the browser refuses true fullscreen (iOS Safari), the stripped-back layout still applies.
-   - Tapping the answer box opens an on-screen keypad with a **Send** button. The microphone keeps listening the whole time, so either route works and the first answer counts whichever way it arrives. On a phone or tablet the box never takes focus, so the device's own keyboard stays out of the way.
+   - Tapping the answer box opens an on-screen keypad with a **Send** button. The microphone keeps listening the whole time, so either route works and the first answer counts whichever way it arrives. On a phone or tablet the box never takes focus, so the device's own keyboard stays out of the way. The pad stays at the bottom of the screen; what moves is everything else — see [Screen space](#screen-space).
    - **⇠ Units first** on the keypad reverses digit entry, so an answer can be typed in the order written arithmetic produces it — right to left. With it on, `34 × 68 = 2312` is entered `2`, `1`, `3`, `2`. Backspace still undoes the digit you pressed last.
    - Whichever way you answered last is how the next question opens. Answer by keypad and the keypad is already up next time; answer by voice, or tap away from the keypad, and it goes back to listening.
 
@@ -194,6 +194,40 @@ either reading, it is accepted. Chrome's top guess for an isolated number is oft
 homophone while its second is the number itself. Because the recorded value always
 comes from the **strict** reading, a generous match can rescue a correct answer but
 can never invent a wrong one or put a number in the history that was never said.
+
+## Screen space
+
+The keypad sits at the bottom and takes about a third of the screen wherever it
+opens. On a phone that is most of what was left after the header, and the question
+ended up behind the keys or above the top edge. The pad does not move; the page
+gives ground instead, in steps, each one only as drastic as its screen needs.
+
+Every step is keyed on **height**, because height is what the pad actually takes.
+The width arm is only there so a phone gets the treatment whatever its height. All
+of it is undone the moment the pad closes. `--keypad-h` is measured from the pad
+itself when it opens — and again on resize and rotation — rather than guessed,
+because its height moves with the units-first caption and with the screen.
+
+| While the pad is up | What gives |
+| --- | --- |
+| Always | Header, footer and subtitle hide. The ladder rail is capped to the room actually left, and its rungs close up rather than spilling past its own border. |
+| Under 860px tall | The question, box, number heard and status line take up less room, and the buttons under them stop competing for it — Send on the pad already does what Check does. Nothing is taken away. |
+| Under 620px tall, or a phone | The page stops scrolling and becomes a box of exactly the height the pad leaves, with the card centred inside it. The rail hides here: the rung badge already says which rung you are on in words, and thirty rungs cannot usefully shrink below about 170px. |
+| Under 700px tall | The pad itself gets shorter. The keys keep their width and stay easy to hit, they just stop being tall, which buys back about a hundred pixels. Deliberately not applied to a tablet held upright, where the screen is short of nothing and the keys are being hit with a finger. |
+| Under 520px tall | A phone on its side. The number heard gives up its place, since the box is already showing the answer digit by digit, and the question is sized in `vh` so it scales with what is left rather than with the width of the screen. |
+
+Two details worth keeping if this is ever touched again. The card is centred by its
+own `margin: auto` rather than by `justify-content`, because centring a flex
+container that can overflow puts the top of the content out of reach and auto
+margins never do. And the boxed height is `dvh`, not `vh`, so a phone's address bar
+sliding in and out cannot leave the pad overlapping the box it was supposed to
+clear.
+
+This was checked by driving the real page in headless Chrome at nineteen screen
+sizes, from 320×568 up to 1920×1080 and including phones on their side, and
+measuring where the question, the box and the status line actually landed relative
+to the pad. Fill mode, the one keypad screen that also carries a table, was checked
+the same way: its table scrolls under the pad, and the essentials above it do not.
 
 ## Translations
 

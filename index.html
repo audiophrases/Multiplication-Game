@@ -8,6 +8,7 @@
     :root {
       --primary: #4b9cff;
       --secondary: #ffcc4b;
+      --keypad-h: 0px;
       --bg: radial-gradient(circle at top left, #f7fbff, #dfe9f7);
     }
 
@@ -414,8 +415,9 @@
 
     .keypad.hidden { display: none; }
 
-    /* Lift the page clear of the pad so it never covers the question or the box */
-    body.keypad-open main { padding-bottom: 290px; }
+    /* On a roomy screen the page simply sits above the pad and can still scroll.
+       A small screen has no room for that; see the compact layout at the end. */
+    body.keypad-open main { padding-bottom: calc(var(--keypad-h) + 24px); }
 
     .keypad .key {
       margin: 0;
@@ -477,6 +479,151 @@
     body.focus-mode .answer-input { font-size: 2.6rem; width: 210px; margin: 12px auto; }
     body.focus-mode .heard-number { font-size: clamp(3rem, 8vw, 5.6rem); }
     body.focus-mode .rung-badge { font-size: 0.9em; }
+
+    /* ===== WHILE THE PAD IS UP =====
+       The pad is a third of the screen whatever the screen is, and the page
+       furniture is the cheapest thing to give up for as long as it is open. On a
+       laptop this alone is the difference between the status line sitting under the
+       question and sitting behind the keys. All of it comes back when the pad
+       closes. */
+    body.keypad-open header,
+    body.keypad-open footer,
+    body.keypad-open .subtitle { display: none; }
+
+    /* The rail is sized against the viewport, and the pad has just taken a third of
+       it, so wherever the rail is still shown it is capped to the room actually
+       left. The floor keeps thirty rungs from spilling past the rail's own border;
+       below that there is no room for a rail at all, which is what the small-screen
+       block further down decides. */
+    body.keypad-open .ladder-rail {
+      height: clamp(168px, calc(100vh - var(--keypad-h) - 190px), min(430px, 48vh));
+      height: clamp(168px, calc(100dvh - var(--keypad-h) - 190px), min(430px, 48vh));
+      gap: 2px;
+    }
+    body.keypad-open .rung { min-height: 3px; }
+
+    /* ===== THE PAD IS UP AND THE SCREEN IS SHORT =====
+       The pad takes a third of the screen wherever it opens, and on a phone that is
+       most of what was left after the header: the question ended up behind the keys
+       or above the top edge, which is what made the ladder and the quiz feel
+       blocked. What follows gives the room back in three steps, each one only as
+       drastic as its screen needs.
+
+       Every step is keyed on height rather than width, because height is what the
+       pad actually takes; the width arm is there so a phone gets the treatment
+       whatever its height. And every step is undone the moment the pad closes.
+
+       STEP ONE — trim. The question, the box, the number heard and the status line
+       take up less room, and the buttons under them stop competing for it: Send on
+       the pad already does what Check does. Nothing is taken away. This alone is
+       enough for a laptop window squeezed down, where the rail still fits beside
+       the question and is worth keeping. */
+    @media (max-width: 760px), (max-height: 860px) {
+      body.keypad-open .card { padding: 10px 12px; border-radius: 14px; }
+      body.keypad-open .ladder-layout { gap: 14px; }
+
+      body.keypad-open .rung-badge { font-size: 0.8em; margin-bottom: 2px; }
+      body.keypad-open .question {
+        font-size: clamp(2rem, 8vw, 2.8rem);
+        margin: 2px 0 6px;
+      }
+      body.keypad-open .answer-input {
+        font-size: 1.9rem;
+        padding: 8px;
+        width: 150px;
+        margin: 8px auto;
+      }
+      body.keypad-open .heard-wrapper { margin: 0; }
+      body.keypad-open .heard-number { min-height: 2.4rem; font-size: 2.2rem; }
+      body.keypad-open .voice-status {
+        font-size: 0.8em;
+        min-height: 20px;
+        margin-bottom: 4px;
+      }
+      body.keypad-open .ladder-play button,
+      body.keypad-open .card > button {
+        padding: 9px 16px;
+        font-size: 0.85em;
+        margin: 4px;
+      }
+    }
+
+    /* STEP TWO — stop scrolling, and centre what is left. On a phone there is no
+       longer enough height for the page to scroll clear of the pad at all, so it
+       stops being a page that scrolls and becomes a box of exactly the height the
+       pad leaves, with the essentials centred inside it. The rail goes here: the
+       rung badge already says which rung you are on in words, and thirty rungs
+       cannot usefully shrink below about 170px, which is most of what is left.
+
+       Deliberately after focus mode in the sheet — both match with the same
+       specificity, and while the pad is up this is the one that should win. */
+    @media (max-width: 760px), (max-height: 620px) {
+      body.keypad-open .card > h2,
+      body.keypad-open .heard-label,
+      body.keypad-open .ladder-rail { display: none; }
+
+      /* Sized from the pad as it actually measures, not from a guess: its height
+         moves with the units-first caption and with the width of the screen. dvh
+         rather than vh so a phone's address bar sliding in and out cannot leave the
+         pad overlapping the box it was supposed to clear. */
+      body.keypad-open main {
+        flex: 0 0 auto;
+        height: calc(100vh - var(--keypad-h));
+        height: calc(100dvh - var(--keypad-h));
+        min-height: 0;
+        padding: 6px;
+        overflow-y: auto;
+        /* Centred by the card's own auto margins rather than by justify-content:
+           centring a flex container that can overflow puts the top of the content
+           out of reach, and auto margins never do that. */
+        align-items: flex-start;
+        justify-content: flex-start;
+      }
+
+      body.keypad-open .card { margin: auto; }
+      body.keypad-open .ladder-layout { gap: 0; }
+      body.keypad-open .ladder-play { flex: 1 1 auto; min-width: 0; }
+    }
+
+    /* STEP THREE — shrink the pad itself. A phone on its side, or a laptop window
+       squeezed right down, leaves so little that trimming the question is not
+       enough. Rather than take anything else away, the keys keep their width and
+       stop being tall, which buys back about a hundred pixels. Deliberately not
+       applied to a tablet held upright: that screen is short of nothing, and its
+       keys are being hit with a finger. */
+    @media (max-height: 700px) {
+      .keypad { gap: 5px; padding: 7px; }
+      .keypad .key { padding: 6px 0; font-size: 1.15rem; }
+      .keypad .key-fn { font-size: 1rem; }
+      .keypad .key-send { font-size: 0.9rem; }
+      .keypad .key-reverse { padding: 5px 0; font-size: 0.7rem; }
+    }
+
+    /* Shorter still — a phone on its side leaves barely two hundred pixels even
+       above the shrunken pad. The number heard gives up its place, since while the
+       pad is up the box is already showing the answer digit by digit, and the
+       question is sized in vh so it scales with what is actually left rather than
+       with the width of the screen. */
+    @media (max-height: 520px) {
+      .keypad { width: min(300px, 100%); }
+
+      body.keypad-open .heard-wrapper { display: none; }
+      body.keypad-open main { padding: 4px; }
+      body.keypad-open .card { padding: 6px 10px; }
+      body.keypad-open .question {
+        font-size: clamp(1.5rem, 6vh, 2rem);
+        margin: 0 0 4px;
+      }
+      body.keypad-open .answer-input {
+        font-size: 1.5rem;
+        padding: 5px;
+        width: 120px;
+        margin: 4px auto;
+      }
+      body.keypad-open .voice-status { min-height: 16px; margin-bottom: 2px; }
+      body.keypad-open .ladder-play button,
+      body.keypad-open .card > button { padding: 6px 14px; margin: 3px; }
+    }
   </style>
 </head>
 <body>
@@ -2879,6 +3026,7 @@
     }
     document.querySelectorAll('.answer-input').forEach(el =>
       el.classList.toggle('units-first', unitsFirst));
+    measureKeypad();   // the caption can rewrap, which changes the pad's height
     if(remember){
       const store = storage();
       if(store) try { store.setItem(REVERSE_KEY, unitsFirst ? '1' : '0'); } catch(_) {}
@@ -2895,13 +3043,26 @@
 
   const keypadOpen = () => !keypad.classList.contains('hidden');
 
+  // How tall the pad actually is. The layout above it is sized from this rather
+  // than from a fixed number, because the pad's height moves with the width of the
+  // screen and with whether the units-first caption wraps onto a second line.
+  function measureKeypad(){
+    const h = keypadOpen() ? Math.ceil(keypad.getBoundingClientRect().height) : 0;
+    document.documentElement.style.setProperty('--keypad-h', h + 'px');
+    return h;
+  }
+
   function showKeypad(input){
     activeInput = input;
     input.classList.toggle('units-first', unitsFirst);
     keypad.classList.remove('hidden');
     document.body.classList.add('keypad-open');
+    // Measured before anything is read back, so the compact small-screen layout has
+    // already resized around the pad by the time the overlap below is worked out.
+    measureKeypad();
     // Scroll by exactly the overlap, not to centre: centring throws the whole page
-    // around, and usually the box is already clear of the pad.
+    // around, and usually the box is already clear of the pad. On a small screen
+    // there is nothing left to scroll, so this quietly does nothing.
     const box = input.getBoundingClientRect();
     const overlap = box.bottom + 16 - keypad.getBoundingClientRect().top;
     if(overlap > 0) window.scrollBy(0, overlap);
@@ -2916,6 +3077,7 @@
     if(!keypadOpen()) return;
     keypad.classList.add('hidden');
     document.body.classList.remove('keypad-open');
+    document.documentElement.style.setProperty('--keypad-h', '0px');
     activeInput = null;
     if(byUser) setPreferredInput('voice');
   }
@@ -2936,6 +3098,13 @@
       : applyDigit(activeInput.value, key, unitsFirst);
     activeInput.dispatchEvent(new Event('input', { bubbles: true }));
   }
+
+  // Turning the phone sideways, or its address bar sliding away, changes both the
+  // pad's height and the room left above it. Re-measured rather than left stale,
+  // or the compact layout would be sized for a screen that is no longer there.
+  ['resize', 'orientationchange'].forEach(evt =>
+    window.addEventListener(evt, () => measureKeypad()));
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', () => measureKeypad());
 
   // pointerdown rather than click, with the default suppressed: pressing a key must
   // not blur the answer box, or the pad would close under the finger.
