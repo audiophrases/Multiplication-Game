@@ -14,7 +14,8 @@ A small web-based game for practising arithmetic — **sums, subtractions, multi
 
 3. Each challenge begins when you press its **Start** button. Answers can be spoken or typed.
 
-   - Every question is **read aloud** in a Microsoft neural voice (English for now, whatever the interface language). **🔊 / 🔈** (top right) turns this off, and tapping the question reads it again. The audio comes from the Edge TTS endpoint on the DictationApp server (`dictationapp.onrender.com/api/tts`); that free service sleeps when idle, so the game wakes it on load, and a clip that arrives more than four seconds late is skipped rather than talking over an answer. If the service can't be reached, the browser's own voice is used only when it is a natural-sounding one.
+   - Every question is **read aloud** in a Microsoft neural voice, in the selected language — Jenny (English), Joana (Catalan) or Denise (French), saying "7 times 8", "7 per 8" or "7 fois 8". **🔊 / 🔈** (top right) turns this off, and tapping the question reads it again. The microphone is **paused while the question is read** and only comes back once the clip has finished, so the game can't hear itself and take the question for an answer. The audio comes from the Edge TTS endpoint on the DictationApp server (`dictationapp.onrender.com/api/tts`); that free service sleeps when idle, so the game wakes it on load, and a clip that takes more than four seconds to arrive is skipped so the child isn't kept waiting. If the service can't be reached, the browser's own voice is used only when it is a natural-sounding one.
+   - The round **talk button** beside the answer box shows whether the game can hear right now: **🔊 Listen…** (the question is being read), **⏳ Wait…** (the microphone is starting or restarting), **🎤 Speak now**, **👂 Hearing you**, or **🔇 Mic off**. Only answer on green. **Hold it to talk**: pressing skips the rest of the reading and brings the microphone up at once if it was restarting, and letting go ends the utterance there and then, so the number lands without waiting for the browser to decide you've finished.
    - **A spoken answer is never taken on its own.** The number heard goes into the answer box with **✓ Send** and **✗ Clear** under it: Send submits it, Clear empties the box so it can be said again, and simply saying another number replaces it. Recognition mishears numbers often enough that taking the first thing it heard cost children questions they knew.
    - **🎤 / 🔇** (top right) mutes the microphone. Muted, it turns red and the keypad opens by itself, since it becomes the only way in. The setting is remembered.
    - **🌐 EN / CA / FR** (top right) cycles the language. It changes both the speech recognition **and the whole interface** — a child answering in Catalan should be reading Catalan. All three understand spoken number words as well as digits, including Catalan compounds like `vint-i-un` and `dos-cents cinquanta`, and French ones like `vingt-et-un` and `quatre-vingt-douze`. The choice is remembered.
@@ -150,8 +151,17 @@ alone**. The child confirms with **Send** (the button under the box, the keypad'
 Send, the ladder's Check, or Enter) or presses **Clear** and says it again. Clear
 re-arms the question, so the tail of the utterance they just cleared can't refill it.
 
-While a question is being read aloud the engine is deafened for the length of the
-clip, so the game never hears itself say "seven times eight" and proposes 78.
+While a question is being read aloud the engine is **paused**: the session is
+aborted, not merely ignored, because abort throws away whatever it had half heard —
+otherwise the tail of "seven times eight" could still arrive afterwards and propose
+78. It reopens when the clip ends (or fails, or is skipped), and a safety timer makes
+sure a clip that never reports its end can't leave voice switched off.
+
+The talk button is driven by `VoiceEngine.state()`, which is worked out from what the
+engine is actually doing — `reading`, `wait` (no live session: starting, or reopening
+after the browser ended one), `ready`, `hearing` (a result within the last 900ms),
+`held` (push-to-talk) or `off`. The gap while a session reopens is exactly when
+answers used to vanish with nothing on screen to say why.
 
 ### Reading numbers out of a transcript
 

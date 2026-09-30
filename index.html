@@ -239,6 +239,54 @@
     /* The pad has its own Send and ⌫ right under the thumb */
     body.keypad-open .confirm-row { display: none; }
 
+    /* THE TALK BUTTON — beside the answer box, one colour per microphone state */
+    .answer-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+    }
+
+    .talk-btn {
+      position: relative;
+      flex: 0 0 auto;
+      width: 88px;
+      height: 88px;
+      margin: 0;
+      padding: 0;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      background: #c6d2e2;
+      color: #1b3145;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+      transition: background 0.2s ease, transform 0.1s ease;
+    }
+    .talk-btn:hover, .talk-btn:active { transform: none; }
+    .talk-icon { font-size: 1.7rem; line-height: 1; }
+    .talk-label { font-size: 0.62rem; font-weight: 800; line-height: 1.1; padding: 0 6px; }
+
+    .talk-btn[data-state="reading"] { background: #3d8fd6; color: #fff; }
+    .talk-btn[data-state="wait"]    { background: #d59b1f; color: #fff; }
+    .talk-btn[data-state="ready"]   { background: #1e8449; color: #fff; animation: talkPulse 1.6s ease-out infinite; }
+    .talk-btn[data-state="hearing"] { background: #27ae60; color: #fff; animation: talkPulse 0.7s ease-out infinite; transform: scale(1.06); }
+    .talk-btn[data-state="held"]    { background: #c0392b; color: #fff; animation: talkPulse 0.9s ease-out infinite; transform: scale(1.08); }
+    .talk-btn[data-state="off"]     { background: #7a8ea3; color: #fff; }
+
+    @keyframes talkPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(30, 132, 73, 0.55); }
+      100% { box-shadow: 0 0 0 18px rgba(30, 132, 73, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .talk-btn[data-state] { animation: none; }
+    }
+
     /* Tapping the question reads it again */
     .question.speakable { cursor: pointer; }
     /* Where a new question scrolls to, clear of the floating buttons */
@@ -678,6 +726,18 @@
       .floating-controls { top: 6px; right: 6px; gap: 4px; }
       .floating-btn { padding: 6px 8px; font-size: 0.95rem; }
     }
+
+    /* The answer box sits beside the talk button, so it no longer centres itself
+       with auto margins — in a flex row those would swallow all the free space.
+       Last so it beats the keypad-open sizes, which set margin: auto. */
+    .answer-row .answer-input,
+    body.keypad-open .answer-row .answer-input { margin-left: 0; margin-right: 0; }
+
+    @media (max-width: 760px), (max-height: 860px) {
+      body.keypad-open .talk-btn { width: 64px; height: 64px; }
+      body.keypad-open .talk-icon { font-size: 1.3rem; }
+      body.keypad-open .talk-label { font-size: 0.55rem; }
+    }
   </style>
 </head>
 <body>
@@ -823,6 +883,10 @@
       sayOrKeypad:'Say your answer, then Send it — or use the keypad.',
       confirmSpoken:v=>`Heard ${v} — Send it, or Clear and say it again.`,
       sayAgain:'Cleared — say it again.',
+      talkHint:'Hold while you say the answer, then let go',
+      'talk.idle':'Not yet', 'talk.reading':'Listen…', 'talk.wait':'Wait…',
+      'talk.ready':'Speak now', 'talk.hearing':'Hearing you', 'talk.held':'Let go when done',
+      'talk.off':'Mic off',
       keypadOpen:"Keypad open — tap Send when you're ready.",
       noNumber:"Didn't catch a number — say it again.",
       tapKeys:'Tap the keys, then Send.',
@@ -938,6 +1002,10 @@
       sayOrKeypad:'Digues la resposta i envia-la, o fes servir el teclat.',
       confirmSpoken:v=>`He sentit ${v} — envia-ho, o esborra-ho i torna-ho a dir.`,
       sayAgain:'Esborrat — torna-ho a dir.',
+      talkHint:'Mantén premut mentre dius la resposta i després deixa anar',
+      'talk.idle':'Encara no', 'talk.reading':'Escolta…', 'talk.wait':'Espera…',
+      'talk.ready':'Parla ara', 'talk.hearing':"T'escolto", 'talk.held':'Deixa anar en acabar',
+      'talk.off':'Micro apagat',
       keypadOpen:'Teclat obert — prem Envia quan estiguis a punt.',
       noNumber:'No he entès cap nombre — torna-ho a dir.',
       tapKeys:'Prem les tecles i després Envia.',
@@ -1053,6 +1121,10 @@
       sayOrKeypad:'Dis ta réponse puis envoie-la, ou utilise le clavier.',
       confirmSpoken:v=>`Entendu ${v} — envoie-le, ou efface et redis-le.`,
       sayAgain:'Effacé — redis-le.',
+      talkHint:'Garde appuyé pendant que tu dis la réponse, puis lâche',
+      'talk.idle':'Pas encore', 'talk.reading':'Écoute…', 'talk.wait':'Attends…',
+      'talk.ready':'Parle !', 'talk.hearing':"Je t'entends", 'talk.held':'Lâche quand tu as fini',
+      'talk.off':'Micro coupé',
       keypadOpen:'Clavier ouvert — appuie sur Envoyer quand tu es prêt.',
       noNumber:"Je n'ai pas entendu de nombre — redis-le.",
       tapKeys:'Appuie sur les touches, puis Envoyer.',
@@ -1239,20 +1311,25 @@
   // ================= READING THE QUESTION ALOUD =================
   // Every question is read out in a Microsoft neural voice, fetched from the Edge
   // TTS endpoint the DictationApp server already runs (public, CORS-open, cached
-  // on the server). English only for now, whatever the interface language.
+  // on the server), in whichever of the three languages is selected.
   // The browser's own voice is only a fallback, and only when it is one of the
   // natural-sounding ones — a robotic voice reading sums is worse than silence.
+  //
+  // The microphone is paused for as long as the question is being read, and only
+  // handed back once the clip has finished. Listening over it meant the game heard
+  // itself say "seven times eight" and took it for the child's answer.
   const QuestionVoice = (() => {
     const TTS_BASE = 'https://dictationapp.onrender.com';
-    const TTS_LANG = 'en-US';
     const SPEAK_KEY = 'mulReadAloud';
     // A clip that turns up this long after its question is no help: the child is
-    // already answering, and hearing it then would only talk over them.
+    // waiting to answer, and the microphone is waiting on the clip.
     const LATE_MS = 4000;
 
     const player = new Audio();
-    const clips = new Map();   // text -> Promise<object URL>
+    const clips = new Map();   // lang + text -> Promise<object URL>
     let turn = 0;
+    let playingTurn = 0;       // the turn whose clip is actually in the player
+    let finishCurrent = null;  // hands the microphone back for the current turn
     let enabled = true;
 
     // iOS only lets an Audio element play by itself once it has played inside a
@@ -1265,39 +1342,42 @@
       try { player.src = SILENCE; const p = player.play(); if(p && p.catch) p.catch(() => {}); } catch(_) {}
     }, true);
 
-    // Whatever we say comes straight back in at our own microphone.
-    player.addEventListener('playing', () => {
-      const secs = isFinite(player.duration) ? player.duration : 2.5;
-      try { VoiceEngine.deafen(secs * 1000 + 300); } catch(_) {}
-    });
+    // Only our own clip ending counts: the silent unlock clip ends too.
+    const clipOver = () => { if(playingTurn === turn && finishCurrent) finishCurrent(); };
+    player.addEventListener('ended', clipOver);
+    player.addEventListener('error', clipOver);
 
-    function clip(text){
-      let p = clips.get(text);
+    function clip(text, lang){
+      const key = lang + '|' + text;
+      let p = clips.get(key);
       if(p) return p;
-      p = fetch(`${TTS_BASE}/api/tts?lang=${TTS_LANG}&text=${encodeURIComponent(text)}`)
+      p = fetch(`${TTS_BASE}/api/tts?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(text)}`)
         .then(res => {
           if(!res.ok) throw new Error('tts ' + res.status);
           return res.blob();
         })
         .then(blob => URL.createObjectURL(blob));
-      p.catch(() => clips.delete(text));   // a failure is worth retrying next time
-      clips.set(text, p);
+      p.catch(() => clips.delete(key));   // a failure is worth retrying next time
+      clips.set(key, p);
       return p;
     }
 
-    function naturalVoice(){
+    function naturalVoice(lang){
       if(!window.speechSynthesis) return null;
+      const prefix = lang.slice(0, 2).toLowerCase();
       return speechSynthesis.getVoices().find(v =>
-        /^en[-_]/i.test(v.lang) && /natural|neural/i.test(v.name)) || null;
+        v.lang.toLowerCase().startsWith(prefix) && /natural|neural/i.test(v.name)) || null;
     }
 
-    function fallback(text, myTurn){
-      const voice = naturalVoice();
-      if(!voice || myTurn !== turn) return;
+    // Returns false when there is no voice worth using, so the caller moves on.
+    function fallback(text, lang, done){
+      const voice = naturalVoice(lang);
+      if(!voice) return false;
       const u = new SpeechSynthesisUtterance(text);
       u.voice = voice; u.lang = voice.lang;
-      u.onstart = () => { try { VoiceEngine.deafen(text.length * 90 + 600); } catch(_) {} };
-      try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch(_) {}
+      u.onend = u.onerror = done;
+      try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch(_) { return false; }
+      return true;
     }
 
     return {
@@ -1314,6 +1394,7 @@
         if(store) try { saved = store.getItem(SPEAK_KEY); } catch(_) {}
         enabled = saved !== '0';
       },
+      reading: () => !!finishCurrent,
 
       // The free Render service sleeps when idle and takes twenty-odd seconds to
       // wake, so it is woken while the child is still on the menus.
@@ -1321,39 +1402,79 @@
         try { fetch(`${TTS_BASE}/health`, { mode: 'no-cors', cache: 'no-store' }).catch(() => {}); } catch(_) {}
       },
 
-      // Reads one question. A newer question, or leaving the screen (the element
-      // is gone), silently cancels a clip that is still on its way.
-      say(text, anchorEl){
-        if(!enabled || !text) return;
+      // Reads one question, with the microphone paused until it is over. Every
+      // way out — the clip ending, failing, arriving too late, or being cut short
+      // — hands the microphone back, and a safety timer covers the ones that
+      // never report at all, so voice can never be left switched off.
+      say(text, lang, anchorEl){
         const myTurn = ++turn;
-        const askedAt = Date.now();
-        const stillWanted = () => myTurn === turn && (!anchorEl || anchorEl.isConnected);
-        clip(text).then(url => {
-          if(!stillWanted() || Date.now() - askedAt > LATE_MS) return;
-          player.pause();
+        try { player.pause(); } catch(_) {}
+        try { if(window.speechSynthesis) speechSynthesis.cancel(); } catch(_) {}
+        finishCurrent = null;
+        if(!enabled || !text){ VoiceEngine.resume(); return; }
+
+        VoiceEngine.pause();
+        let safety = null;
+        const finish = () => {
+          if(finishCurrent !== finish) return;
+          finishCurrent = null;
+          clearTimeout(safety);
+          VoiceEngine.resume();
+        };
+        finishCurrent = finish;
+        safety = setTimeout(finish, LATE_MS);
+
+        const stillWanted = () => myTurn === turn && finishCurrent === finish
+          && (!anchorEl || anchorEl.isConnected);
+        clip(text, lang).then(url => {
+          if(!stillWanted()){ finish(); return; }
+          clearTimeout(safety);
+          playingTurn = myTurn;
           player.src = url;
+          // Covers a clip that never reports its end; generous, since cutting a
+          // question off mid-word is worse than a moment's wait.
+          player.onloadedmetadata = () => {
+            if(finishCurrent !== finish || !isFinite(player.duration)) return;
+            clearTimeout(safety);
+            safety = setTimeout(finish, player.duration * 1000 + 1500);
+          };
+          safety = setTimeout(finish, 8000);
           const p = player.play();
-          if(p && p.catch) p.catch(() => {});
-        }).catch(() => { if(stillWanted()) fallback(text, myTurn); });
+          if(p && p.catch) p.catch(finish);   // blocked from playing: nothing to wait for
+        }).catch(() => {
+          if(!stillWanted()){ finish(); return; }
+          clearTimeout(safety);
+          if(fallback(text, lang, finish)) safety = setTimeout(finish, text.length * 120 + 2500);
+          else finish();
+        });
       },
 
+      // Cuts the reading short — the child pressed to talk, or turned reading off.
       stop(){
         turn++;
         try { player.pause(); } catch(_) {}
         try { if(window.speechSynthesis) speechSynthesis.cancel(); } catch(_) {}
+        if(finishCurrent) finishCurrent();
+        finishCurrent = null;
+        VoiceEngine.resume();
       }
     };
   })();
 
-  // "56 ÷ 8" as someone would say it. Spelled out rather than left to the voice,
-  // which reads × as "multiplied by" one day and "by" the next.
-  function spokenQuestion(rendered){
+  // The operation words each voice says. Spelled out rather than left to the
+  // voice, which reads × as "multiplied by" one day and "by" the next.
+  const SPOKEN_OPS = {
+    'en-US': { '×':'times', '÷':'divided by', '−':'minus', '+':'plus' },
+    'ca-ES': { '×':'per',   '÷':'dividit entre', '−':'menys', '+':'més' },
+    'fr-FR': { '×':'fois',  '÷':'divisé par', '−':'moins', '+':'plus' }
+  };
+
+  // "56 ÷ 8" as someone would say it, in the given language.
+  function spokenQuestion(rendered, lang){
+    const words = SPOKEN_OPS[lang] || SPOKEN_OPS['en-US'];
     return String(rendered)
       .replace(/\s*=\s*\?\s*$/, '')
-      .replace(/×/g, ' times ')
-      .replace(/÷/g, ' divided by ')
-      .replace(/[−-]/g, ' minus ')
-      .replace(/\+/g, ' plus ')
+      .replace(/[×÷−+-]/g, sym => ` ${words[sym === '-' ? '−' : sym]} `)
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -1364,8 +1485,9 @@
     const text = `${rendered} = ?`;
     qEl.textContent = text;
     qEl.classList.add('speakable');
-    qEl.onclick = () => QuestionVoice.say(spokenQuestion(text), qEl);
-    QuestionVoice.say(spokenQuestion(text), qEl);
+    const read = () => QuestionVoice.say(spokenQuestion(text, speechLang), speechLang, qEl);
+    qEl.onclick = read;
+    read();
     keepInView(qEl);
   }
 
@@ -1434,6 +1556,7 @@
     const STALL_MS    = 15000;   // a live session this quiet has stopped listening
     const START_MS    = 5000;    // a start() that never reached onstart is stuck
     const MAX_BACKOFF = 2000;
+    const HEARING_MS  = 900;     // how long after a result the child counts as still talking
 
     let rec = null;          // the live session, null between sessions
     let wanted = false;      // whether a session should be running at all
@@ -1446,10 +1569,36 @@
     let sessionLang = null;  // a live session is locked to the language it opened with
     let running = false, startedAt = 0, lastEventAt = 0, armedAt = 0;
     let retryTimer = null, idleTimer = null, watchTimer = null;
+    let paused = false;      // the question is being read aloud; nothing is heard meanwhile
+    let held = false, heldAt = 0;   // push-to-talk
+    let lastHeardAt = 0, hearingTimer = null;
+    let stateListener = null, lastState = null;
 
     const now = () => Date.now();
-    const usable = () => !!SpeechRecognition && !micMuted && !fatal;
-    const mark = what => { lastEventAt = now(); voiceDebug.event(what); };
+    const usable = () => !!SpeechRecognition && !micMuted && !fatal && !paused;
+
+    // What the child should be told about the microphone, in one word. This is
+    // what the talk button shows, so it is worked out from what the engine is
+    // really doing rather than from what the question hoped it was doing — the
+    // gap while a session reopens is exactly when answers used to vanish unseen.
+    function state(){
+      if(!SpeechRecognition || micMuted || fatal) return 'off';
+      if(!handler) return 'idle';
+      if(paused) return 'reading';
+      if(!running) return 'wait';
+      if(held) return 'held';
+      if(now() - lastHeardAt < HEARING_MS) return 'hearing';
+      return 'ready';
+    }
+
+    function emit(){
+      const s = state();
+      if(s === lastState) return;
+      lastState = s;
+      if(stateListener) try { stateListener(s); } catch(_) {}
+    }
+
+    const mark = what => { lastEventAt = now(); voiceDebug.event(what); emit(); };
 
     function schedule(delay){
       clearTimeout(retryTimer);
@@ -1543,6 +1692,10 @@
           if(txt && txt.trim()) hyps.push(txt.trim());
         }
         if(!hyps.length) continue;
+        lastHeardAt = now();
+        emit();
+        clearTimeout(hearingTimer);
+        hearingTimer = setTimeout(emit, HEARING_MS + 20);
         voiceDebug.heard(hyps, alt.isFinal, armedAt);
         const armed = handler;
         armed.onSpeech(hyps, !!alt.isFinal);
@@ -1569,6 +1722,7 @@
       fatal = kind;
       wanted = false;
       clearTimeout(retryTimer); retryTimer = null;
+      emit();
       if(handler && handler.onFatal) handler.onFatal(kind);
     }
 
@@ -1601,7 +1755,9 @@
         handler = h;
         skipBelow = seenLen;
         armedAt = Date.now();
+        lastHeardAt = 0;
         this.prime();
+        emit();
         if(fatal && h.onFatal) h.onFatal(fatal);
       },
 
@@ -1613,6 +1769,7 @@
         skipBelow = seenLen;
         clearTimeout(idleTimer);
         idleTimer = setTimeout(() => { if(!handler) VoiceEngine.sleep(); }, IDLE_GRACE);
+        emit();
       },
 
       // Hands the microphone back without forgetting anything, so prime() wakes it.
@@ -1625,7 +1782,56 @@
         rec = null; running = false;
         detach(r);
         if(r) try { r.abort(); } catch(_) {}
+        emit();
       },
+
+      // Silences the microphone while the question is read aloud. The session is
+      // aborted rather than just ignored: abort throws away whatever it had half
+      // heard, so the reading can't turn up afterwards as an answer. It costs a
+      // restart, which is why the talk button says "wait" until the new one is up.
+      pause(){
+        if(paused) return;
+        paused = true;
+        clearTimeout(retryTimer); retryTimer = null;
+        const r = rec;
+        rec = null; running = false;
+        detach(r);
+        if(r) try { r.abort(); } catch(_) {}
+        emit();
+      },
+
+      resume(){
+        if(!paused) return;
+        paused = false;
+        failures = 0;
+        if(wanted) open();
+        emit();
+      },
+
+      // Push-to-talk. Pressing makes sure a session is up now instead of whenever
+      // the retry timer gets round to it, and replaces one stuck starting. Letting
+      // go ends the utterance there and then, so the answer arrives at once rather
+      // than when the browser decides the child has finished.
+      talk(down){
+        if(down){
+          held = true; heldAt = now();
+          if(usable()){
+            wanted = true;
+            if(!watchTimer) watchTimer = setInterval(watch, WATCH_EVERY);
+            if(!rec){ failures = 0; open(); }
+            else if(!running && now() - startedAt > 1500) recycle();
+          }
+        } else if(held){
+          held = false;
+          if(rec && running && lastHeardAt > heldAt && typeof rec.stop === 'function'){
+            try { rec.stop(); } catch(_) {}
+          }
+        }
+        emit();
+      },
+
+      state,
+      onState(fn){ stateListener = fn; lastState = null; emit(); },
 
       // A live session is locked to the language it opened with, so switching
       // language means cycling it.
@@ -2080,6 +2286,66 @@
     return draft;
   }
 
+  // ================= THE TALK BUTTON =================
+  // Sits beside the answer box and says, in one word, whether the game can hear
+  // right now: the question is still being read, the microphone is starting up,
+  // or it is listening. Talking into a microphone that was quietly restarting is
+  // how answers used to go missing with nothing on screen to say why.
+  // Held down it is push-to-talk: see VoiceEngine.talk.
+  const TALK_ICONS = {
+    idle:'🎤', reading:'🔊', wait:'⏳', ready:'🎤', hearing:'👂', held:'🎙️', off:'🔇'
+  };
+
+  function talkBtnHtml(){
+    const s = VoiceEngine.state();
+    return `<button type="button" class="talk-btn" id="talkBtn" data-state="${s}" title="${t('talkHint')}" aria-live="polite">
+      <span class="talk-icon">${TALK_ICONS[s]}</span><span class="talk-label">${t('talk.' + s)}</span>
+    </button>`;
+  }
+
+  function paintTalk(s){
+    const btn = document.getElementById('talkBtn');
+    if(!btn) return;
+    btn.dataset.state = s;
+    btn.querySelector('.talk-icon').textContent = TALK_ICONS[s] || '🎤';
+    btn.querySelector('.talk-label').textContent = t('talk.' + s);
+  }
+  VoiceEngine.onState(paintTalk);
+
+  let talking = false;
+
+  function startTalk(){
+    if(talking) return;
+    talking = true;
+    if(micMuted) micBtn.onclick();              // pressing to talk means they want the mic
+    if(VoiceEngine.blocked()) VoiceEngine.retry();
+    if(QuestionVoice.reading()) QuestionVoice.stop();   // skip the rest of the question
+    VoiceEngine.talk(true);
+  }
+
+  function endTalk(){
+    if(!talking) return;
+    talking = false;
+    VoiceEngine.talk(false);
+  }
+
+  // pointerdown rather than click, so holding works, with the default suppressed
+  // so a long press on a phone doesn't open the text-selection menu instead.
+  document.addEventListener('pointerdown', e => {
+    if(!e.target.closest || !e.target.closest('.talk-btn')) return;
+    e.preventDefault();
+    startTalk();
+  });
+  ['pointerup', 'pointercancel'].forEach(evt => document.addEventListener(evt, endTalk));
+  // Keyboard: Enter or Space on the button is a tap.
+  document.addEventListener('click', e => {
+    if(e.detail !== 0 || !e.target.closest || !e.target.closest('.talk-btn')) return;
+    startTalk(); endTalk();
+  });
+  document.addEventListener('contextmenu', e => {
+    if(e.target.closest && e.target.closest('.talk-btn')) e.preventDefault();
+  });
+
   // The Send / Clear pair that sits under every answer box.
   function confirmRowHtml(){
     return `<div class="confirm-row hidden" id="confirmRow">
@@ -2294,7 +2560,7 @@
       <div class="card">
         <h2>${t('practiceAdding', n)}</h2>
         <div class="question" id="addQ">0 + ${n} = ?</div>
-        <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
+        <div class="answer-row">${talkBtnHtml()}<input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off"></div>
         ${confirmRowHtml()}
         <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="addHeard"></div></div>
         <div class="voice-status" id="addStatus">${t('pressStart')}</div>
@@ -2355,7 +2621,7 @@
       <h2>${t('fillTitle', n, blankCount)}</h2>
       <p class="subtitle">${t('fillSub')}</p>
       <div class="question" id="fillQuestion">${t('ready')}</div>
-      <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
+      <div class="answer-row">${talkBtnHtml()}<input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off"></div>
         ${confirmRowHtml()}
       <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="fillHeard"></div></div>
       <div class="voice-status" id="fillStatus">${t('pressStart')}</div>
@@ -2415,7 +2681,7 @@
         <h2>${t('quizTitle', n)}</h2>
         <p class="subtitle">${t('quizSub')}</p>
         <div id="question" class="question">${t('pressStartShort')}</div>
-        <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
+        <div class="answer-row">${talkBtnHtml()}<input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off"></div>
         ${confirmRowHtml()}
         <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="quizHeard"></div></div>
         <div class="voice-status" id="quizStatus">${t('pressStart')}</div>
@@ -3035,7 +3301,7 @@
           <div class="ladder-play">
             <div class="rung-badge" id="rungBadge"></div>
             <div class="question" id="ladderQ">${t('ready')}</div>
-            <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
+            <div class="answer-row">${talkBtnHtml()}<input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off"></div>
         ${confirmRowHtml()}
             <div class="heard-wrapper"><div class="heard-label">${t('yourAnswer')}</div><div class="heard-number" id="ladderHeard"></div></div>
             <div class="voice-status" id="ladderStatus">${t('pressStart')}</div>
@@ -3226,6 +3492,7 @@
   function applyStaticStrings(){
     setMicMuted(micMuted, false);             // relabels in the current language
     paintSpeakBtn();
+    paintTalk(VoiceEngine.state());           // a screen that isn't redrawn keeps its button
     document.getElementById('highScoresBtn').textContent = t('progressBtn');
     document.getElementById('resetBtn').textContent = t('resetBtn');
     keypad.setAttribute('aria-label', t('keypadLabel'));

@@ -365,3 +365,132 @@ describe('the language and the mute button', () => {
     expect(sessions).toHaveLength(1);
   });
 });
+
+describe('while the question is read aloud', () => {
+  test('pausing aborts the session, so nothing half-heard survives it', () => {
+    const q = heard();
+    engine.listen(q);
+    const rec = latest();
+    engine.pause();
+    expect(rec.aborted).toBe(true);
+    // A late result from the aborted session is detached and goes nowhere.
+    rec.say(0, ['seven times eight'], true);
+    expect(q.calls).toHaveLength(0);
+  });
+
+  test('nothing reopens until the reading is over', () => {
+    engine.listen(heard());
+    engine.pause();
+    jest.advanceTimersByTime(10000);
+    expect(sessions).toHaveLength(1);
+    engine.listen(heard());              // the next question, armed mid-reading
+    expect(sessions).toHaveLength(1);
+    engine.resume();
+    expect(sessions).toHaveLength(2);
+    expect(latest().started).toBe(true);
+  });
+
+  test('the question hears the answer once the microphone is back', () => {
+    const q = heard();
+    engine.listen(q);
+    engine.pause();
+    engine.resume();
+    latest().say(0, ['56'], true);
+    expect(q.calls).toEqual([{ hyps: ['56'], isFinal: true }]);
+  });
+
+  test('resuming when nothing was paused is harmless', () => {
+    engine.listen(heard());
+    engine.resume();
+    expect(sessions).toHaveLength(1);
+  });
+});
+
+describe('the state the talk button shows', () => {
+  let states;
+  beforeEach(() => { states = []; engine.onState(s => states.push(s)); });
+
+  test('idle with nothing asked, then ready once a session is up', () => {
+    expect(engine.state()).toBe('idle');
+    engine.listen(heard());
+    expect(engine.state()).toBe('ready');
+  });
+
+  test('reading while paused, wait while the new session starts', () => {
+    Recognition.confirmStarts = false;
+    engine.listen(heard());
+    expect(engine.state()).toBe('wait');
+    engine.pause();
+    expect(engine.state()).toBe('reading');
+    engine.resume();
+    expect(engine.state()).toBe('wait');
+    latest().onstart();
+    expect(engine.state()).toBe('ready');
+    Recognition.confirmStarts = true;
+  });
+
+  test('hearing while results arrive, back to ready after a pause', () => {
+    engine.listen(heard());
+    latest().say(0, ['fifty'], false);
+    expect(engine.state()).toBe('hearing');
+    jest.advanceTimersByTime(1000);
+    expect(engine.state()).toBe('ready');
+    expect(states).toContain('hearing');
+    expect(states[states.length - 1]).toBe('ready');
+  });
+
+  test('a session the browser ends shows wait until it is back', () => {
+    Recognition.confirmStarts = false;
+    engine.listen(heard());
+    latest().onstart();
+    expect(engine.state()).toBe('ready');
+    latest().finish();
+    expect(engine.state()).toBe('wait');
+    Recognition.confirmStarts = true;
+  });
+
+  test('off when muted', () => {
+    set('micMuted', true);
+    engine.listen(heard());
+    expect(engine.state()).toBe('off');
+  });
+
+  test('only a change is reported', () => {
+    engine.listen(heard());
+    engine.listen(heard());
+    const readies = states.filter(s => s === 'ready');
+    expect(readies).toHaveLength(1);
+  });
+});
+
+describe('push-to-talk', () => {
+  test('pressing opens a session straight away when none is up', () => {
+    engine.listen(heard());
+    latest().finish();                   // the browser ended it; a retry is pending
+    const before = sessions.length;
+    engine.talk(true);
+    expect(sessions.length).toBe(before + 1);
+    expect(engine.state()).toBe('held');
+  });
+
+  test('letting go after speaking ends the utterance at once', () => {
+    engine.listen(heard());
+    const rec = latest();
+    rec.stop = jest.fn();
+    engine.talk(true);
+    jest.advanceTimersByTime(10);
+    rec.say(0, ['forty'], false);
+    engine.talk(false);
+    expect(rec.stop).toHaveBeenCalled();
+  });
+
+  test('letting go without saying anything leaves the session running', () => {
+    engine.listen(heard());
+    const rec = latest();
+    rec.stop = jest.fn();
+    engine.talk(true);
+    engine.talk(false);
+    expect(rec.stop).not.toHaveBeenCalled();
+    expect(engine.state()).toBe('ready');
+  });
+});
