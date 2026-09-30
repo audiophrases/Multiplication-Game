@@ -220,6 +220,30 @@
     }
     .answer-input:disabled { background:#eef3f9; color:#7a8ea3; }
 
+    /* A number the microphone heard, waiting to be sent or cleared */
+    .answer-input.pending {
+      border-color: #1e8449;
+      box-shadow: 0 0 14px rgba(30, 132, 73, 0.4);
+    }
+
+    .confirm-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: -6px 0 8px;
+    }
+    .confirm-row.hidden { display: none; }
+    .confirm-row button { margin: 0; padding: 12px 24px; min-width: 120px; }
+    .confirm-row .confirm-send { background: #1e8449; }
+    /* The pad has its own Send and ⌫ right under the thumb */
+    body.keypad-open .confirm-row { display: none; }
+
+    /* Tapping the question reads it again */
+    .question.speakable { cursor: pointer; }
+    /* Where a new question scrolls to, clear of the floating buttons */
+    .question { scroll-margin-top: 12px; }
+
     /* MODE PICKER */
     .mode-grid {
       display: grid;
@@ -624,12 +648,43 @@
       body.keypad-open .ladder-play button,
       body.keypad-open .card > button { padding: 6px 14px; margin: 3px; }
     }
+
+    /* ===== A PHONE HELD UPRIGHT =====
+       A phone held upright has no room for the rail beside the question, and
+       stacked above it the rail took half the screen and pushed the question below
+       the fold. There it turns into a thin strip across the top instead: same
+       rungs, same colours, the question straight underneath. Last in the sheet
+       so it wins over the focus-mode and keypad sizes for the rail. */
+    @media (max-width: 640px) {
+      .ladder-layout { flex-direction: column; flex-wrap: nowrap; gap: 10px; }
+      .ladder-rail,
+      body.focus-mode .ladder-rail,
+      body.keypad-open .ladder-rail {
+        flex-direction: row;
+        flex: 0 0 auto;
+        width: 100%;
+        height: 24px;
+        padding: 4px 6px;
+        gap: 2px;
+        border-radius: 10px;
+      }
+      .ladder-play { flex: 0 0 auto; min-width: 0; }
+      .rung { min-height: 0; min-width: 0; border-left-width: 3px; }
+      .rung.current { margin-right: 0; outline: 2px solid #e0a800; }
+      .rung .climber { display: none; }
+      .rung.best-mark::after { right: auto; left: 50%; top: -15px; transform: translateX(-50%); }
+
+      /* Four buttons abreast would otherwise sit over most of the header */
+      .floating-controls { top: 6px; right: 6px; gap: 4px; }
+      .floating-btn { padding: 6px 8px; font-size: 0.95rem; }
+    }
   </style>
 </head>
 <body>
 
 <div class="floating-controls">
   <button id="micBtn" class="floating-btn" type="button" title="Mute the microphone" aria-label="Mute the microphone" aria-pressed="false">🎤</button>
+  <button id="speakBtn" class="floating-btn" type="button" title="Stop reading the questions aloud" aria-label="Stop reading the questions aloud" aria-pressed="true">🔊</button>
   <button id="langBtn" class="floating-btn" type="button" title="Language" aria-label="Language: English">🌐 EN</button>
   <button id="focusBtn" class="floating-btn" type="button" title="Fullscreen" aria-label="Enter fullscreen">⛶</button>
 </div>
@@ -725,8 +780,9 @@
       fullscreen:'Fullscreen', exitFullscreen:'Exit fullscreen',
       micMute:'Mute the microphone', micUnmute:'Turn the microphone back on',
       micOffStatus:'Microphone off — use the keypad.',
+      speakerMute:'Stop reading the questions aloud', speakerUnmute:'Read the questions aloud',
 
-      keypadLabel:'Number keypad', send:'Send', deleteDigit:'Delete last digit',
+      keypadLabel:'Number keypad', send:'Send', clear:'Clear', deleteDigit:'Delete last digit',
       unitsFirstOn:'⇠ Units first — ON', unitsFirstOff:'⇠ Units first — off',
 
       homeTitle:'What shall we practise?',
@@ -764,7 +820,9 @@
       'zone.Ground':'Ground', 'zone.Lower':'Lower', 'zone.Middle':'Middle',
       'zone.Upper':'Upper',  'zone.Summit':'Summit',
 
-      sayOrKeypad:'Say your answer, or use the keypad — first answer counts.',
+      sayOrKeypad:'Say your answer, then Send it — or use the keypad.',
+      confirmSpoken:v=>`Heard ${v} — Send it, or Clear and say it again.`,
+      sayAgain:'Cleared — say it again.',
       keypadOpen:"Keypad open — tap Send when you're ready.",
       noNumber:"Didn't catch a number — say it again.",
       tapKeys:'Tap the keys, then Send.',
@@ -837,8 +895,9 @@
       fullscreen:'Pantalla completa', exitFullscreen:'Surt de pantalla completa',
       micMute:'Silencia el micròfon', micUnmute:'Torna a activar el micròfon',
       micOffStatus:'Micròfon apagat — fes servir el teclat.',
+      speakerMute:'Deixa de llegir les preguntes en veu alta', speakerUnmute:'Llegeix les preguntes en veu alta',
 
-      keypadLabel:'Teclat numèric', send:'Envia', deleteDigit:'Esborra l\'últim dígit',
+      keypadLabel:'Teclat numèric', send:'Envia', clear:'Esborra', deleteDigit:'Esborra l\'últim dígit',
       unitsFirstOn:'⇠ Unitats primer — SÍ', unitsFirstOff:'⇠ Unitats primer — no',
 
       homeTitle:'Què practiquem?',
@@ -876,7 +935,9 @@
       'zone.Ground':'Base', 'zone.Lower':'Baixa', 'zone.Middle':'Mitjana',
       'zone.Upper':'Alta',  'zone.Summit':'Cim',
 
-      sayOrKeypad:'Digues la resposta o fes servir el teclat — compta la primera.',
+      sayOrKeypad:'Digues la resposta i envia-la, o fes servir el teclat.',
+      confirmSpoken:v=>`He sentit ${v} — envia-ho, o esborra-ho i torna-ho a dir.`,
+      sayAgain:'Esborrat — torna-ho a dir.',
       keypadOpen:'Teclat obert — prem Envia quan estiguis a punt.',
       noNumber:'No he entès cap nombre — torna-ho a dir.',
       tapKeys:'Prem les tecles i després Envia.',
@@ -949,8 +1010,9 @@
       fullscreen:'Plein écran', exitFullscreen:'Quitter le plein écran',
       micMute:'Couper le microphone', micUnmute:'Rallumer le microphone',
       micOffStatus:'Microphone coupé — utilise le clavier.',
+      speakerMute:'Ne plus lire les questions à voix haute', speakerUnmute:'Lire les questions à voix haute',
 
-      keypadLabel:'Clavier numérique', send:'Envoyer', deleteDigit:'Effacer le dernier chiffre',
+      keypadLabel:'Clavier numérique', send:'Envoyer', clear:'Effacer', deleteDigit:'Effacer le dernier chiffre',
       unitsFirstOn:"⇠ Unités d'abord — OUI", unitsFirstOff:"⇠ Unités d'abord — non",
 
       homeTitle:"On s'entraîne à quoi ?",
@@ -988,7 +1050,9 @@
       'zone.Ground':'Sol',   'zone.Lower':'Basse', 'zone.Middle':'Milieu',
       'zone.Upper':'Haute',  'zone.Summit':'Sommet',
 
-      sayOrKeypad:'Dis ta réponse ou utilise le clavier — la première compte.',
+      sayOrKeypad:'Dis ta réponse puis envoie-la, ou utilise le clavier.',
+      confirmSpoken:v=>`Entendu ${v} — envoie-le, ou efface et redis-le.`,
+      sayAgain:'Effacé — redis-le.',
       keypadOpen:'Clavier ouvert — appuie sur Envoyer quand tu es prêt.',
       noNumber:"Je n'ai pas entendu de nombre — redis-le.",
       tapKeys:'Appuie sur les touches, puis Envoyer.',
@@ -1171,6 +1235,153 @@
       location.reload();
     }
   };
+
+  // ================= READING THE QUESTION ALOUD =================
+  // Every question is read out in a Microsoft neural voice, fetched from the Edge
+  // TTS endpoint the DictationApp server already runs (public, CORS-open, cached
+  // on the server). English only for now, whatever the interface language.
+  // The browser's own voice is only a fallback, and only when it is one of the
+  // natural-sounding ones — a robotic voice reading sums is worse than silence.
+  const QuestionVoice = (() => {
+    const TTS_BASE = 'https://dictationapp.onrender.com';
+    const TTS_LANG = 'en-US';
+    const SPEAK_KEY = 'mulReadAloud';
+    // A clip that turns up this long after its question is no help: the child is
+    // already answering, and hearing it then would only talk over them.
+    const LATE_MS = 4000;
+
+    const player = new Audio();
+    const clips = new Map();   // text -> Promise<object URL>
+    let turn = 0;
+    let enabled = true;
+
+    // iOS only lets an Audio element play by itself once it has played inside a
+    // tap, and the clips arrive after the tap is over. So the first tap anywhere
+    // plays a silent clip through the same element to unlock it.
+    const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+    document.addEventListener('pointerdown', function unlock(){
+      document.removeEventListener('pointerdown', unlock, true);
+      if(player.src) return;
+      try { player.src = SILENCE; const p = player.play(); if(p && p.catch) p.catch(() => {}); } catch(_) {}
+    }, true);
+
+    // Whatever we say comes straight back in at our own microphone.
+    player.addEventListener('playing', () => {
+      const secs = isFinite(player.duration) ? player.duration : 2.5;
+      try { VoiceEngine.deafen(secs * 1000 + 300); } catch(_) {}
+    });
+
+    function clip(text){
+      let p = clips.get(text);
+      if(p) return p;
+      p = fetch(`${TTS_BASE}/api/tts?lang=${TTS_LANG}&text=${encodeURIComponent(text)}`)
+        .then(res => {
+          if(!res.ok) throw new Error('tts ' + res.status);
+          return res.blob();
+        })
+        .then(blob => URL.createObjectURL(blob));
+      p.catch(() => clips.delete(text));   // a failure is worth retrying next time
+      clips.set(text, p);
+      return p;
+    }
+
+    function naturalVoice(){
+      if(!window.speechSynthesis) return null;
+      return speechSynthesis.getVoices().find(v =>
+        /^en[-_]/i.test(v.lang) && /natural|neural/i.test(v.name)) || null;
+    }
+
+    function fallback(text, myTurn){
+      const voice = naturalVoice();
+      if(!voice || myTurn !== turn) return;
+      const u = new SpeechSynthesisUtterance(text);
+      u.voice = voice; u.lang = voice.lang;
+      u.onstart = () => { try { VoiceEngine.deafen(text.length * 90 + 600); } catch(_) {} };
+      try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch(_) {}
+    }
+
+    return {
+      enabled: () => enabled,
+      setEnabled(on){
+        enabled = !!on;
+        if(!enabled) this.stop();
+        const store = storage();
+        if(store) try { store.setItem(SPEAK_KEY, enabled ? '1' : '0'); } catch(_) {}
+      },
+      restore(){
+        const store = storage();
+        let saved = null;
+        if(store) try { saved = store.getItem(SPEAK_KEY); } catch(_) {}
+        enabled = saved !== '0';
+      },
+
+      // The free Render service sleeps when idle and takes twenty-odd seconds to
+      // wake, so it is woken while the child is still on the menus.
+      warm(){
+        try { fetch(`${TTS_BASE}/health`, { mode: 'no-cors', cache: 'no-store' }).catch(() => {}); } catch(_) {}
+      },
+
+      // Reads one question. A newer question, or leaving the screen (the element
+      // is gone), silently cancels a clip that is still on its way.
+      say(text, anchorEl){
+        if(!enabled || !text) return;
+        const myTurn = ++turn;
+        const askedAt = Date.now();
+        const stillWanted = () => myTurn === turn && (!anchorEl || anchorEl.isConnected);
+        clip(text).then(url => {
+          if(!stillWanted() || Date.now() - askedAt > LATE_MS) return;
+          player.pause();
+          player.src = url;
+          const p = player.play();
+          if(p && p.catch) p.catch(() => {});
+        }).catch(() => { if(stillWanted()) fallback(text, myTurn); });
+      },
+
+      stop(){
+        turn++;
+        try { player.pause(); } catch(_) {}
+        try { if(window.speechSynthesis) speechSynthesis.cancel(); } catch(_) {}
+      }
+    };
+  })();
+
+  // "56 ÷ 8" as someone would say it. Spelled out rather than left to the voice,
+  // which reads × as "multiplied by" one day and "by" the next.
+  function spokenQuestion(rendered){
+    return String(rendered)
+      .replace(/\s*=\s*\?\s*$/, '')
+      .replace(/×/g, ' times ')
+      .replace(/÷/g, ' divided by ')
+      .replace(/[−-]/g, ' minus ')
+      .replace(/\+/g, ' plus ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Puts the question on screen and reads it out. Tapping the question says it
+  // again, for the child who missed it.
+  function showQuestion(qEl, rendered){
+    const text = `${rendered} = ?`;
+    qEl.textContent = text;
+    qEl.classList.add('speakable');
+    qEl.onclick = () => QuestionVoice.say(spokenQuestion(text), qEl);
+    QuestionVoice.say(spokenQuestion(text), qEl);
+    keepInView(qEl);
+  }
+
+  // Whatever the screen, the question is never left below the fold or behind the
+  // keypad. Only moves the page when it has to, so a question already in view
+  // doesn't make the screen jump on every answer.
+  function keepInView(el){
+    const r = el.getBoundingClientRect();
+    const pad = document.getElementById('keypad');
+    const padTop = pad && !pad.classList.contains('hidden')
+      ? pad.getBoundingClientRect().top : window.innerHeight;
+    if(r.top < 0 || r.bottom > padTop){
+      try { el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+      catch(_) { el.scrollIntoView(true); }
+    }
+  }
 
   // SPEECH HELPERS
   // A voice readout for testing on real devices, where the console is out of
@@ -1708,35 +1919,8 @@
     if(!micMuted && !requireSpeechRecognition()) return;
     stopListening();
 
-    if(inputEl){
-      inputEl.value = '';
-      // Not auto-focused: that would pop the keypad and mute the microphone before
-      // the player has chosen how to answer.
-      inputEl.oninput = () => {
-        if(parseInt(inputEl.value, 10) === expected){
-          inputEl.oninput = null;
-          const val = parseInt(inputEl.value, 10);
-          statusEl.innerHTML = `<span class="good">${t('typedCorrect', val)}</span>`;
-          playSfx(audioSuccess);
-          setPreferredInput('keypad');
-          hideKeypad();
-          stopListening();
-          setTimeout(() => onCorrect('typed', val), 600);
-        }
-      };
-      // This mode checks on every keystroke, so Send only needs to answer for a
-      // number that isn't right yet — otherwise the key would feel dead.
-      inputEl._submit = () => {
-        const val = parseInt(inputEl.value, 10);
-        if(isNaN(val) || val === expected) return;
-        showHeard(val, false);
-        onMismatch && onMismatch(val, String(val));
-        statusEl.innerHTML = `<span class="bad">${t('tryAgain', val)}</span>`;
-        inputEl.value = '';
-      };
-    }
-
     let heardTimeout = null;
+    let done = false;
 
     const showHeard = (val, isCorrect) => {
       if(!heardEl) return;
@@ -1749,37 +1933,47 @@
       }, 2000);
     };
 
+    const accept = (source, val) => {
+      if(done) return;
+      done = true;
+      if(inputEl) inputEl.oninput = null;
+      draft.reset();
+      showHeard(expected, true);
+      setPreferredInput(source === 'spoken' ? 'voice' : 'keypad');
+      hideKeypad();
+      stopListening();
+      statusEl.innerHTML = source === 'spoken'
+        ? `<span class="good">${t('heardCorrect', val, val)}</span>`
+        : `<span class="good">${t('typedCorrect', val)}</span>`;
+      playSfx(audioSuccess);
+      setTimeout(() => onCorrect(source, val), 600);
+    };
+
+    // Send, from the keypad, the confirm button or Enter. Whatever is in the box is
+    // the answer, whether it was typed or proposed by the microphone.
+    const submit = () => {
+      if(done || !inputEl) return;
+      const val = parseInt(inputEl.value, 10);
+      if(isNaN(val)) return;
+      const source = draft.source();
+      if(val === expected){ accept(source, val); return; }
+      showHeard(val, false);
+      onMismatch && onMismatch(val, String(val));
+      statusEl.innerHTML = `<span class="bad">${t('tryAgain', val)}</span>`;
+      draft.clear();
+      if(voiceAvailable()) VoiceEngine.listen(speech);   // nothing already said counts for the retry
+    };
+
     const speech = {
       onSpeech(hypotheses, isFinal){
-        const transcript = hypotheses[0];
-        const val = parseSpokenNumber(transcript);
-
-        // A matching interim is accepted straight away; a wrong one waits for the
-        // final, so a half-heard answer never gets called wrong.
-        if(val === expected || matchesExpected(hypotheses, expected)){
-          if(inputEl) inputEl.oninput = null;
-          // Report the expected value, not the top guess: when a lower-ranked
-          // alternative or the phonetic fold is what matched, the top guess is the
-          // wrong word.
-          showHeard(expected, true);
-          setPreferredInput('voice');
-          stopListening();
-          statusEl.innerHTML = `<span class="good">${t('heardCorrect', transcript, expected)}</span>`;
-          playSfx(audioSuccess);
-          setTimeout(() => onCorrect(transcript, expected), 600);
+        if(done) return;
+        const val = spokenValue(hypotheses, expected);
+        if(isNaN(val)){
+          if(isFinal && !draft.pending()) statusEl.innerHTML = `<span class="bad">${t('noNumber')}</span>`;
           return;
         }
-        if(!isFinal){
-          if(!isNaN(val) && heardEl){
-            heardEl.textContent = val;
-            heardEl.classList.remove('correct','incorrect');
-            heardEl.classList.add('provisional','visible');
-          }
-          return;
-        }
-        showHeard(val, false);
-        onMismatch && onMismatch(val, transcript);
-        statusEl.innerHTML = `<span class="bad">${t('heardWrong', transcript, isNaN(val) ? null : val)}</span>`;
+        // Never accepted on its own: it goes in the box, and the player sends it.
+        draft.propose(val);
       },
       onTrouble(){ statusEl.textContent = t('netTrouble'); },
       onFatal(kind){
@@ -1788,12 +1982,29 @@
       }
     };
 
+    const draft = answerDraft(inputEl, statusEl, submit, () => {
+      statusEl.textContent = t('sayAgain');
+      if(voiceAvailable()) VoiceEngine.listen(speech);
+    });
+
+    if(inputEl){
+      inputEl.value = '';
+      // Not auto-focused: that would pop the keypad and mute the microphone before
+      // the player has chosen how to answer. Typing is already deliberate, so a
+      // typed right answer still lands on the keystroke that completes it.
+      inputEl.oninput = () => {
+        if(parseInt(inputEl.value, 10) === expected) accept('typed', expected);
+      };
+      inputEl.onkeydown = e => { if(e.key === 'Enter') submit(); };
+      inputEl._submit = submit;
+    }
+
     voiceControl = {
       // Unmuting and switching language both land here. listen() re-arms on the
       // running microphone; relang() only cycles it when the language actually
       // changed, because a live session is locked to the one it opened with.
       restart(){
-        if(!voiceAvailable()) return;
+        if(done || !voiceAvailable()) return;
         VoiceEngine.retry();
         VoiceEngine.listen(speech);
         VoiceEngine.relang();
@@ -1811,6 +2022,70 @@
     statusEl.textContent = t('listening');
     // Carry the last question's choice into this one; voice stays live regardless.
     if(preferredInput === 'keypad' && inputEl) showKeypad(inputEl);
+  }
+
+  // ================= CONFIRMING A SPOKEN ANSWER =================
+  // Recognition mishears numbers often enough — "fourteen" for "forty", a stray
+  // word from across the room — that taking the first thing it heard as the answer
+  // cost children questions they knew. So a spoken number is only a proposal: it
+  // goes in the answer box, and the player either sends it or clears it and says
+  // it again. Saying another number simply replaces it.
+
+  // What the microphone thinks the answer was. When any alternative reads as the
+  // right answer, strictly or by sound, that is what gets proposed: the top guess is
+  // often a homophone while a lower one is the number itself. The player still
+  // sees it and has to send it, so the rescue can never answer for them.
+  function spokenValue(hypotheses, expected){
+    if(matchesExpected(hypotheses, expected)) return expected;
+    return parseSpokenNumber(hypotheses[0]);
+  }
+
+  function answerDraft(inputEl, statusEl, onSend, onClear){
+    const row = document.getElementById('confirmRow');
+    let spoken = null;   // the box's text as the microphone left it
+
+    const hideRow = () => {
+      if(row) row.classList.add('hidden');
+      if(inputEl) inputEl.classList.remove('pending');
+    };
+
+    const draft = {
+      propose(val){
+        if(!inputEl) return;
+        spoken = String(val);
+        inputEl.value = spoken;
+        inputEl.classList.add('pending');
+        if(row) row.classList.remove('hidden');
+        statusEl.textContent = t('confirmSpoken', val);
+      },
+      pending(){ return spoken !== null && !!inputEl && inputEl.value !== ''; },
+      clear(){
+        spoken = null;
+        if(inputEl) inputEl.value = '';
+        hideRow();
+      },
+      reset(){ spoken = null; hideRow(); },
+      // Edited on the keypad after the microphone filled it in: then it was typed.
+      source(){ return spoken !== null && !!inputEl && inputEl.value === spoken ? 'spoken' : 'typed'; }
+    };
+
+    hideRow();
+    if(row){
+      const send = row.querySelector('.confirm-send');
+      const clear = row.querySelector('.confirm-clear');
+      send.disabled = clear.disabled = false;
+      send.onclick = () => onSend();
+      clear.onclick = () => { draft.clear(); onClear(); };
+    }
+    return draft;
+  }
+
+  // The Send / Clear pair that sits under every answer box.
+  function confirmRowHtml(){
+    return `<div class="confirm-row hidden" id="confirmRow">
+      <button type="button" class="confirm-send">✓ ${t('send')}</button>
+      <button type="button" class="confirm-clear secondary">✗ ${t('clear')}</button>
+    </div>`;
   }
 
   // FLOW
@@ -2020,6 +2295,7 @@
         <h2>${t('practiceAdding', n)}</h2>
         <div class="question" id="addQ">0 + ${n} = ?</div>
         <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
+        ${confirmRowHtml()}
         <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="addHeard"></div></div>
         <div class="voice-status" id="addStatus">${t('pressStart')}</div>
         <button id="addSubmit">${t('start')}</button>
@@ -2033,7 +2309,7 @@
 
     const ask = () => {
       const expected = (step+1) * n;
-      qEl.textContent = `${step*n} + ${n} = ?`;
+      showQuestion(qEl, `${step*n} + ${n}`);
       statusEl.textContent = t('sayOrTypeMoveOn', expected);
       listenForNumber(expected, statusEl, () => {
         step++;
@@ -2080,6 +2356,7 @@
       <p class="subtitle">${t('fillSub')}</p>
       <div class="question" id="fillQuestion">${t('ready')}</div>
       <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
+        ${confirmRowHtml()}
       <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="fillHeard"></div></div>
       <div class="voice-status" id="fillStatus">${t('pressStart')}</div>
       <div class="table-preview">${all.map(i=>`<div>${n} × ${i} = ${blanks.includes(i)?'❓':'<strong>'+n*i+'</strong>'}</div>`).join('')}</div>
@@ -2093,7 +2370,7 @@
     const ask = () => {
       const i = blanks[idx];
       const expected = n * i;
-      qEl.textContent = `${n} × ${i} = ?`;
+      showQuestion(qEl, `${n} × ${i}`);
       statusEl.textContent = t('sayOrType', expected);
       listenForNumber(expected, statusEl, () => {
         idx++;
@@ -2139,6 +2416,7 @@
         <p class="subtitle">${t('quizSub')}</p>
         <div id="question" class="question">${t('pressStartShort')}</div>
         <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
+        ${confirmRowHtml()}
         <div class="heard-wrapper"><div class="heard-label">${t('heard')}</div><div class="heard-number" id="quizHeard"></div></div>
         <div class="voice-status" id="quizStatus">${t('pressStart')}</div>
         <button id="submitQ">${t('start')}</button>
@@ -2153,7 +2431,7 @@
     const ask = () => {
       const expected = n * questions[qIdx];
       let missedThis = false;
-      qEl.textContent = `${n} × ${questions[qIdx]} = ?`;
+      showQuestion(qEl, `${n} × ${questions[qIdx]}`);
       statusEl.textContent = t('sayOrType', expected);
       listenForNumber(expected, statusEl, () => {
         // One record per question: the quiz retries until correct, so "did they get
@@ -2613,25 +2891,11 @@
   function askOnce(expected, statusEl, heardEl, inputEl, submitBtn, onVerdict){
     stopListening();
     let settled = false;
-    let graceTimer = null;
-
-    // A wrong answer heard once is not yet a wrong answer. Recognisers revise their
-    // own guess, and a child who sees themselves mis-heard repeats the number
-    // immediately — both arrive inside this window, and both used to cost a rung.
-    const WRONG_GRACE = 700;
-
-    // What the recogniser thinks it is hearing, before it has committed to it.
-    const showProvisional = value => {
-      if(!heardEl || settled) return;
-      heardEl.textContent = value;
-      heardEl.classList.remove('correct','incorrect');
-      heardEl.classList.add('provisional','visible');
-    };
 
     const settle = (value, source) => {
       if(settled) return;
       settled = true;
-      clearTimeout(graceTimer);
+      draft.reset();
       setPreferredInput(source === 'spoken' ? 'voice' : 'keypad');
       hideKeypad();
       stopListening();
@@ -2646,56 +2910,24 @@
       onVerdict(correct, value, source);
     };
 
-    const commitTyped = () => {
+    // The only way an answer counts: sending what is in the box, whether it was
+    // typed or proposed by the microphone and left as it was.
+    const commit = () => {
+      if(settled || !inputEl) return;
       const v = parseInt(inputEl.value, 10);
-      if(!isNaN(v)) settle(v, 'typed');
+      if(!isNaN(v)) settle(v, draft.source());
     };
-
-    if(inputEl){
-      inputEl.disabled = false;
-      inputEl.value = '';
-      // Deliberately not focused: focusing opens the keypad, which would cover the
-      // question before the player has chosen how they want to answer.
-      inputEl.onkeydown = e => { if(e.key === 'Enter') commitTyped(); };
-      inputEl._submit = commitTyped;
-    }
-    if(submitBtn){
-      submitBtn.disabled = false;
-      submitBtn.onclick = commitTyped;
-    }
 
     const speech = {
       onSpeech(hypotheses, isFinal){
         if(settled) return;
-
-        // Accept early only on a match. An interim that already reads as the right
-        // answer is safe: the recogniser is telling us they said it. An interim
-        // that reads as a wrong one may still be refined, so it waits.
-        if(matchesExpected(hypotheses, expected)){
-          clearTimeout(graceTimer);
-          settle(expected, 'spoken');
-          return;
-        }
-
-        // The recorded answer always comes from the strict parse, never the
-        // phonetic fold, so a generous match can rescue a right answer but can
-        // never invent a wrong one.
-        const val = parseSpokenNumber(hypotheses[0]);
-        if(!isFinal){
-          if(!isNaN(val)) showProvisional(val);
-          return;
-        }
+        const val = spokenValue(hypotheses, expected);
         if(isNaN(val)){
-          statusEl.innerHTML = `<span class="bad">${t('noNumber')}</span>`;
+          if(isFinal && !draft.pending()) statusEl.innerHTML = `<span class="bad">${t('noNumber')}</span>`;
           return;
         }
-        showProvisional(val);
-        clearTimeout(graceTimer);
-        graceTimer = setTimeout(() => {
-          // Leaving the screen drops voiceControl, and a verdict must not arrive
-          // for a question nobody is looking at any more.
-          if(voiceControl === handle) settle(val, 'spoken');
-        }, WRONG_GRACE);
+        // A proposal, never a verdict: a mishearing used to cost a rung here.
+        draft.propose(val);
       },
       onTrouble(){ statusEl.textContent = t('netTrouble'); },
       onFatal(kind){
@@ -2703,6 +2935,25 @@
         if(inputEl) showKeypad(inputEl);   // the only way in now, so don't make them ask
       }
     };
+
+    const draft = answerDraft(inputEl, statusEl, commit, () => {
+      statusEl.textContent = t('sayAgain');
+      // Re-armed, so the tail of the utterance they just cleared can't refill the box.
+      if(voiceAvailable()) VoiceEngine.listen(speech);
+    });
+
+    if(inputEl){
+      inputEl.disabled = false;
+      inputEl.value = '';
+      // Deliberately not focused: focusing opens the keypad, which would cover the
+      // question before the player has chosen how they want to answer.
+      inputEl.onkeydown = e => { if(e.key === 'Enter') commit(); };
+      inputEl._submit = commit;
+    }
+    if(submitBtn){
+      submitBtn.disabled = false;
+      submitBtn.onclick = commit;
+    }
 
     const handle = {
       // Unmuting and switching language both land here. The keypad never touches
@@ -2785,6 +3036,7 @@
             <div class="rung-badge" id="rungBadge"></div>
             <div class="question" id="ladderQ">${t('ready')}</div>
             <input type="number" inputmode="none" id="answerInput" class="answer-input" placeholder="?" autocomplete="off">
+        ${confirmRowHtml()}
             <div class="heard-wrapper"><div class="heard-label">${t('yourAnswer')}</div><div class="heard-number" id="ladderHeard"></div></div>
             <div class="voice-status" id="ladderStatus">${t('pressStart')}</div>
             <button id="ladderSubmit">${t('check')}</button>
@@ -2820,7 +3072,7 @@
     const submitEl = document.getElementById('ladderSubmit');
 
     paintRung(op, r);
-    document.getElementById('ladderQ').textContent = `${qOp.render(a, b)} = ?`;
+    showQuestion(document.getElementById('ladderQ'), qOp.render(a, b));
     heardEl.classList.remove('visible','correct','incorrect');
     submitEl.textContent = t('check');
     updateHeader();
@@ -2923,6 +3175,24 @@
   const langBtn = document.getElementById('langBtn');
 
   const micBtn = document.getElementById('micBtn');
+  const speakBtn = document.getElementById('speakBtn');
+
+  function paintSpeakBtn(){
+    const on = QuestionVoice.enabled();
+    speakBtn.textContent = on ? '🔊' : '🔈';
+    speakBtn.classList.toggle('muted', !on);
+    speakBtn.title = t(on ? 'speakerMute' : 'speakerUnmute');
+    speakBtn.setAttribute('aria-label', speakBtn.title);
+    speakBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  speakBtn.onclick = () => {
+    QuestionVoice.setEnabled(!QuestionVoice.enabled());
+    paintSpeakBtn();
+    // Turning it on mid-question reads the question that is up now.
+    const q = QuestionVoice.enabled() && document.querySelector('.question.speakable');
+    if(q && q.onclick) q.onclick();
+  };
 
   function setMicMuted(on, remember){
     micMuted = !!on;
@@ -2955,6 +3225,7 @@
   // Chrome that lives outside main and so is never redrawn by a screen.
   function applyStaticStrings(){
     setMicMuted(micMuted, false);             // relabels in the current language
+    paintSpeakBtn();
     document.getElementById('highScoresBtn').textContent = t('progressBtn');
     document.getElementById('resetBtn').textContent = t('resetBtn');
     keypad.setAttribute('aria-label', t('keypadLabel'));
@@ -3193,6 +3464,7 @@
       savedMic     = store.getItem(MIC_KEY);
     } catch(_) {}
     micMuted = savedMic === '1';
+    QuestionVoice.restore();
     setUnitsFirst(savedReverse === '1', false);
     setFocusMode(savedFocus === '1', false);
     setSpeechLang(savedLang || 'en-US', false, false);
@@ -3200,6 +3472,7 @@
   })();
 
   // START
+  QuestionVoice.warm();
   startGame();
 
 })();

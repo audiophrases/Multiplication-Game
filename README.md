@@ -14,10 +14,12 @@ A small web-based game for practising arithmetic — **sums, subtractions, multi
 
 3. Each challenge begins when you press its **Start** button. Answers can be spoken or typed.
 
+   - Every question is **read aloud** in a Microsoft neural voice (English for now, whatever the interface language). **🔊 / 🔈** (top right) turns this off, and tapping the question reads it again. The audio comes from the Edge TTS endpoint on the DictationApp server (`dictationapp.onrender.com/api/tts`); that free service sleeps when idle, so the game wakes it on load, and a clip that arrives more than four seconds late is skipped rather than talking over an answer. If the service can't be reached, the browser's own voice is used only when it is a natural-sounding one.
+   - **A spoken answer is never taken on its own.** The number heard goes into the answer box with **✓ Send** and **✗ Clear** under it: Send submits it, Clear empties the box so it can be said again, and simply saying another number replaces it. Recognition mishears numbers often enough that taking the first thing it heard cost children questions they knew.
    - **🎤 / 🔇** (top right) mutes the microphone. Muted, it turns red and the keypad opens by itself, since it becomes the only way in. The setting is remembered.
    - **🌐 EN / CA / FR** (top right) cycles the language. It changes both the speech recognition **and the whole interface** — a child answering in Catalan should be reading Catalan. All three understand spoken number words as well as digits, including Catalan compounds like `vint-i-un` and `dos-cents cinquanta`, and French ones like `vingt-et-un` and `quatre-vingt-douze`. The choice is remembered.
    - **⛶** (top right) is fullscreen focus mode: it strips away the header, footer and other chrome so only the question remains. Where the browser refuses true fullscreen (iOS Safari), the stripped-back layout still applies.
-   - Tapping the answer box opens an on-screen keypad with a **Send** button. The microphone keeps listening the whole time, so either route works and the first answer counts whichever way it arrives. On a phone or tablet the box never takes focus, so the device's own keyboard stays out of the way. The pad stays at the bottom of the screen; what moves is everything else — see [Screen space](#screen-space).
+   - Tapping the answer box opens an on-screen keypad with a **Send** button. The microphone keeps listening the whole time, so either route works; nothing counts until it is sent. On a phone or tablet the box never takes focus, so the device's own keyboard stays out of the way. The pad stays at the bottom of the screen; what moves is everything else — see [Screen space](#screen-space).
    - **⇠ Units first** on the keypad reverses digit entry, so an answer can be typed in the order written arithmetic produces it — right to left. With it on, `34 × 68 = 2312` is entered `2`, `1`, `3`, `2`. Backspace still undoes the digit you pressed last.
    - Whichever way you answered last is how the next question opens. Answer by keypad and the keypad is already up next time; answer by voice, or tap away from the keypad, and it goes back to listening.
 
@@ -141,19 +143,15 @@ microphone is doing, every hypothesis as it arrives, and how long each took to l
 ### Accepting an answer
 
 `interimResults: true` means hypotheses arrive while the child is still speaking,
-rather than after the browser has decided the utterance ended. They are accepted
-**asymmetrically**, because this game scores one shot per question:
+rather than after the browser has decided the utterance ended. Each one that reads as
+a number is written into the answer box as it arrives, so the box follows the child's
+speech ("fifty" becoming "56") — but **nothing is ever accepted from the microphone
+alone**. The child confirms with **Send** (the button under the box, the keypad's
+Send, the ladder's Check, or Enter) or presses **Clear** and says it again. Clear
+re-arms the question, so the tail of the utterance they just cleared can't refill it.
 
-- An interim that already reads as the **right** answer is accepted immediately. If
-  the recogniser thinks they said it, they said it.
-- An interim that reads as a **wrong** answer is never acted on; it waits for the
-  final, since a partial hypothesis often gets refined ("fifty" becoming "fifty six").
-- A **final** wrong answer gets a 700ms grace window before it counts. Recognisers
-  revise their own guess, and a child who sees themselves misheard says the number
-  again straight away. Both arrive inside that window, and both used to cost a rung.
-
-Meanwhile the number being heard is shown greyed out as a provisional guess, so the
-child can see it is listening.
+While a question is being read aloud the engine is deafened for the length of the
+clip, so the game never hears itself say "seven times eight" and proposes 78.
 
 ### Reading numbers out of a transcript
 
@@ -196,6 +194,11 @@ comes from the **strict** reading, a generous match can rescue a correct answer 
 can never invent a wrong one or put a number in the history that was never said.
 
 ## Screen space
+
+Whatever the screen, each new question is scrolled into view if it has landed below
+the fold or behind the keypad. On a phone held upright (under 640px wide) the ladder's
+rail turns into a thin strip above the question rather than a column stacked on top
+of it, which used to push the question half a screen down.
 
 The keypad sits at the bottom and takes about a third of the screen wherever it
 opens. On a phone that is most of what was left after the header, and the question
