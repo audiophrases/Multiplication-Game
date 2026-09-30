@@ -883,7 +883,7 @@
       sayOrKeypad:'Say your answer, then Send it — or use the keypad.',
       confirmSpoken:v=>`Heard ${v} — Send it, or Clear and say it again.`,
       sayAgain:'Cleared — say it again.',
-      talkHint:'Hold while you say the answer, then let go',
+      talkHint:'Hold while you say the answer, then let go (or hold Space)',
       'talk.idle':'Not yet', 'talk.reading':'Listen…', 'talk.wait':'Wait…',
       'talk.ready':'Speak now', 'talk.hearing':'Hearing you', 'talk.held':'Let go when done',
       'talk.off':'Mic off',
@@ -1002,7 +1002,7 @@
       sayOrKeypad:'Digues la resposta i envia-la, o fes servir el teclat.',
       confirmSpoken:v=>`He sentit ${v} — envia-ho, o esborra-ho i torna-ho a dir.`,
       sayAgain:'Esborrat — torna-ho a dir.',
-      talkHint:'Mantén premut mentre dius la resposta i després deixa anar',
+      talkHint:'Mantén premut mentre dius la resposta i després deixa anar (o mantén premuda la barra espaiadora)',
       'talk.idle':'Encara no', 'talk.reading':'Escolta…', 'talk.wait':'Espera…',
       'talk.ready':'Parla ara', 'talk.hearing':"T'escolto", 'talk.held':'Deixa anar en acabar',
       'talk.off':'Micro apagat',
@@ -1121,7 +1121,7 @@
       sayOrKeypad:'Dis ta réponse puis envoie-la, ou utilise le clavier.',
       confirmSpoken:v=>`Entendu ${v} — envoie-le, ou efface et redis-le.`,
       sayAgain:'Effacé — redis-le.',
-      talkHint:'Garde appuyé pendant que tu dis la réponse, puis lâche',
+      talkHint:'Garde appuyé pendant que tu dis la réponse, puis lâche (ou garde la barre d’espace enfoncée)',
       'talk.idle':'Pas encore', 'talk.reading':'Écoute…', 'talk.wait':'Attends…',
       'talk.ready':'Parle !', 'talk.hearing':"Je t'entends", 'talk.held':'Lâche quand tu as fini',
       'talk.off':'Micro coupé',
@@ -2346,11 +2346,61 @@
     if(e.target.closest && e.target.closest('.talk-btn')) e.preventDefault();
   });
 
+  // ================= KEYBOARD SHORTCUTS =================
+  // A desktop without a touchscreen still has a keyboard: digits type into the
+  // answer box, Enter sends, Backspace clears a number the microphone proposed (or
+  // else deletes a digit), and Space is held to talk just like
+  // the button. Only while a question is waiting for an answer, and never while
+  // focus is on some other button or field, where those keys already mean something.
+  function answerTarget(e){
+    if(e.ctrlKey || e.altKey || e.metaKey) return null;
+    if(!overlay.classList.contains('hidden')) return null;
+    const input = document.getElementById('answerInput');
+    if(!input || input.disabled) return null;
+    const el = e.target;
+    const elsewhere = el && el !== input && el !== document.body &&
+      el.matches && el.matches('button, input, select, textarea, [contenteditable]') &&
+      !el.closest('.talk-btn, .confirm-row, .keypad');
+    return elsewhere ? null : input;
+  }
+
+  document.addEventListener('keydown', e => {
+    const input = answerTarget(e);
+    if(!input) return;
+    const row = document.getElementById('confirmRow');
+    const proposed = row && !row.classList.contains('hidden');
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      // The box sends its own Enter; this covers focus anywhere else.
+      if(e.target !== input && typeof input._submit === 'function') input._submit();
+    } else if(e.key === 'Backspace' && proposed){
+      e.preventDefault();
+      row.querySelector('.confirm-clear').click();
+    } else if(e.target !== input && (/^[0-9]$/.test(e.key) || e.key === 'Backspace')){
+      // Typed into the box from anywhere, the same way the on-screen pad does it,
+      // so the mouse is never needed. A focused box takes its own keystrokes.
+      e.preventDefault();
+      input.value = e.key === 'Backspace'
+        ? applyBackspace(input.value, unitsFirst)
+        : applyDigit(input.value, e.key, unitsFirst);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    } else if(e.key === ' ' || e.code === 'Space'){
+      e.preventDefault();   // no page scroll, and no click on a focused button
+      if(!e.repeat) startTalk();
+    }
+  });
+
+  document.addEventListener('keyup', e => {
+    if(e.key !== ' ' && e.code !== 'Space') return;
+    if(talking) e.preventDefault();
+    endTalk();
+  });
+
   // The Send / Clear pair that sits under every answer box.
   function confirmRowHtml(){
     return `<div class="confirm-row hidden" id="confirmRow">
-      <button type="button" class="confirm-send">✓ ${t('send')}</button>
-      <button type="button" class="confirm-clear secondary">✗ ${t('clear')}</button>
+      <button type="button" class="confirm-send" title="Enter">✓ ${t('send')}</button>
+      <button type="button" class="confirm-clear secondary" title="Backspace">✗ ${t('clear')}</button>
     </div>`;
   }
 
