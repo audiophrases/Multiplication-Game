@@ -813,6 +813,17 @@
   const INPUT_KEY = 'mulInputMode';
   let preferredInput = 'voice';   // 'voice' | 'keypad'
 
+  // A mouse or trackpad means a real keyboard is nearby (laptop, Chromebook, desktop),
+  // and number keys already type into the answer box. There the pad stays closed
+  // until the player taps the box; phones and tablets still get it opened for them.
+  const hasPhysicalKeyboard = () =>
+    !!(window.matchMedia && matchMedia('(any-pointer: fine) and (any-hover: hover)').matches);
+
+  // Every automatic opening goes through here; deliberate taps call showKeypad directly.
+  function autoShowKeypad(input){
+    if(input && !hasPhysicalKeyboard()) showKeypad(input);
+  }
+
   function setPreferredInput(mode){
     if(mode !== 'voice' && mode !== 'keypad') return;
     preferredInput = mode;
@@ -2145,7 +2156,10 @@
       if(inputEl) inputEl.oninput = null;
       draft.reset();
       showHeard(expected, true);
-      setPreferredInput(source === 'spoken' ? 'voice' : 'keypad');
+      // Only the on-screen pad counts as choosing the keypad; typing on a physical
+      // keyboard must not make the pad pop up on every later question.
+      if(source === 'spoken') setPreferredInput('voice');
+      else if(keypadOpen()) setPreferredInput('keypad');
       hideKeypad();
       stopListening();
       statusEl.innerHTML = source === 'spoken'
@@ -2184,7 +2198,7 @@
       onTrouble(){ statusEl.textContent = t('netTrouble'); },
       onFatal(kind){
         statusEl.innerHTML = `<span class="bad">${t(kind === 'denied' ? 'micDenied' : 'micNoDevice')}</span>`;
-        if(inputEl) showKeypad(inputEl);   // the only way in now, so open it
+        autoShowKeypad(inputEl);   // the only way in now, unless a keyboard is attached
       }
     };
 
@@ -2220,14 +2234,14 @@
 
     if(!voiceAvailable()){
       statusEl.textContent = t('micOffStatus');
-      if(inputEl) showKeypad(inputEl);   // the only way in while the mic is off
+      autoShowKeypad(inputEl);   // the only way in now, unless a keyboard is attached
       return;
     }
 
     VoiceEngine.listen(speech);
     statusEl.textContent = t('listening');
     // Carry the last question's choice into this one; voice stays live regardless.
-    if(preferredInput === 'keypad' && inputEl) showKeypad(inputEl);
+    if(preferredInput === 'keypad') autoShowKeypad(inputEl);
   }
 
   // ================= CONFIRMING A SPOKEN ANSWER =================
@@ -3212,7 +3226,10 @@
       if(settled) return;
       settled = true;
       draft.reset();
-      setPreferredInput(source === 'spoken' ? 'voice' : 'keypad');
+      // Only the on-screen pad counts as choosing the keypad; typing on a physical
+      // keyboard must not make the pad pop up on every later question.
+      if(source === 'spoken') setPreferredInput('voice');
+      else if(keypadOpen()) setPreferredInput('keypad');
       hideKeypad();
       stopListening();
       if(inputEl){ inputEl.onkeydown = null; inputEl.disabled = true; inputEl.blur(); }
@@ -3248,7 +3265,7 @@
       onTrouble(){ statusEl.textContent = t('netTrouble'); },
       onFatal(kind){
         statusEl.innerHTML = `<span class="bad">${t(kind === 'denied' ? 'micDenied' : 'micNoDevice')}</span>`;
-        if(inputEl) showKeypad(inputEl);   // the only way in now, so don't make them ask
+        autoShowKeypad(inputEl);   // the only way in now, unless a keyboard is attached
       }
     };
 
@@ -3289,7 +3306,7 @@
     // the mic is muted still has a handle for unmuting to bring voice back.
     if(!voiceAvailable()){
       statusEl.textContent = t(micMuted ? 'micOffStatus' : 'tapKeys');
-      if(inputEl) showKeypad(inputEl);   // the only way in, so don't make them ask
+      autoShowKeypad(inputEl);   // the only way in now, unless a keyboard is attached
       return;
     }
 
@@ -3298,7 +3315,7 @@
 
     // Open the keypad the way they answered last time. Voice keeps running
     // underneath, so either route stays live and neither can wedge the other.
-    if(preferredInput === 'keypad' && inputEl) showKeypad(inputEl);
+    if(preferredInput === 'keypad') autoShowKeypad(inputEl);
   }
 
   // Per-operation climb, so progress in one never disturbs another.
@@ -3528,7 +3545,7 @@
     if(micMuted){
       stopRecognizer();                       // hand the microphone back entirely
       const input = document.querySelector('.answer-input:not([disabled])');
-      if(input) showKeypad(input);            // the only way in now, so open it
+      autoShowKeypad(input);                  // the only way in now, unless a keyboard is attached
       const status = document.querySelector('.voice-status');
       if(status) status.textContent = t('micOffStatus');
     } else if(voiceControl){
