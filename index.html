@@ -819,9 +819,18 @@
   const hasPhysicalKeyboard = () =>
     !!(window.matchMedia && matchMedia('(any-pointer: fine) and (any-hover: hover)').matches);
 
+  // With a keyboard the answer box takes focus as each question starts, so the
+  // player can just type. Without one, focus would pop the device's own keyboard.
+  function focusAnswer(input){
+    if(input && !input.disabled && hasPhysicalKeyboard()) input.focus({ preventScroll: true });
+  }
+
   // Every automatic opening goes through here; deliberate taps call showKeypad directly.
+  // Where a keyboard is attached, the box is focused instead of the pad opening.
   function autoShowKeypad(input){
-    if(input && !hasPhysicalKeyboard()) showKeypad(input);
+    if(!input) return;
+    if(hasPhysicalKeyboard()) focusAnswer(input);
+    else showKeypad(input);
   }
 
   function setPreferredInput(mode){
@@ -2209,14 +2218,14 @@
 
     if(inputEl){
       inputEl.value = '';
-      // Not auto-focused: that would pop the keypad and mute the microphone before
-      // the player has chosen how to answer. Typing is already deliberate, so a
-      // typed right answer still lands on the keystroke that completes it.
+      // Typing is already deliberate, so a typed right answer still lands on the
+      // keystroke that completes it.
       inputEl.oninput = () => {
         if(parseInt(inputEl.value, 10) === expected) accept('typed', expected);
       };
       inputEl.onkeydown = e => { if(e.key === 'Enter') submit(); };
       inputEl._submit = submit;
+      focusAnswer(inputEl);   // only with a keyboard; on touch it would cover the question
     }
 
     voiceControl = {
@@ -2390,9 +2399,10 @@
     } else if(e.key === 'Backspace' && proposed){
       e.preventDefault();
       row.querySelector('.confirm-clear').click();
-    } else if(e.target !== input && (/^[0-9]$/.test(e.key) || e.key === 'Backspace')){
+    } else if(/^[0-9]$/.test(e.key) || e.key === 'Backspace'){
       // Typed into the box from anywhere, the same way the on-screen pad does it,
-      // so the mouse is never needed. A focused box takes its own keystrokes.
+      // so the mouse is never needed. A focused box goes through here too, so
+      // units-first still applies and nothing but digits gets in.
       e.preventDefault();
       input.value = e.key === 'Backspace'
         ? applyBackspace(input.value, unitsFirst)
@@ -3278,10 +3288,9 @@
     if(inputEl){
       inputEl.disabled = false;
       inputEl.value = '';
-      // Deliberately not focused: focusing opens the keypad, which would cover the
-      // question before the player has chosen how they want to answer.
       inputEl.onkeydown = e => { if(e.key === 'Enter') commit(); };
       inputEl._submit = commit;
+      focusAnswer(inputEl);   // only with a keyboard; on touch it would cover the question
     }
     if(submitBtn){
       submitBtn.disabled = false;
@@ -3725,19 +3734,24 @@
       if(input.disabled) return;
       // Focus is what summons the device keyboard, and it would fight our own pad
       // for the bottom of the screen. On touch the field never takes focus at all;
-      // the pad writes to it directly, so nothing is lost. A mouse still focuses it
-      // so a physical keyboard and Enter keep working.
-      if(e.pointerType === 'touch') e.preventDefault();
-      showKeypad(input);
+      // the pad writes to it directly, so nothing is lost. A mouse just focuses it:
+      // where there is a mouse there is a keyboard, and the pad would only be in the
+      // way. A touchscreen laptop still gets the pad when the box is touched.
+      if(e.pointerType === 'touch' || e.pointerType === 'pen'){
+        e.preventDefault();
+        showKeypad(input);
+      } else {
+        autoShowKeypad(input);
+      }
     } else if(!e.target.closest('.keypad')){
       hideKeypad(true);
     }
   });
 
-  // Keyboard users get the pad too, without it stealing focus from anything else.
+  // Tabbing into the box opens the pad only where there is no keyboard to type on.
   document.addEventListener('focusin', e => {
     const input = e.target.closest && e.target.closest('.answer-input');
-    if(input && !input.disabled) showKeypad(input);
+    if(input && !input.disabled && !hasPhysicalKeyboard()) showKeypad(input);
   });
 
   // ================= FOCUS MODE =================
